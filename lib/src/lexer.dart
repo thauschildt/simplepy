@@ -444,6 +444,19 @@ class Lexer {
 
   /// Scans a number literal (integer or floating-point).
   void number() {
+    // Check for 0x, 0b, 0o prefixes only if the number starts with '0'
+    // and there's a next character. 'start' points to the beginning of the potential number.
+    if (source[start] == '0' && (current == start + 1) && !isAtEnd()) {
+      String prefixChar = peek().toLowerCase(); // Check next char, case-insensitive
+      if (prefixChar == 'x' || prefixChar == 'b' || prefixChar == 'o') {
+        advance(); // Consume the prefix character ('x', 'b', or 'o')
+        _scanPrefixedInteger(prefixChar); // Delegate to helper
+        return;
+      }
+      // If it starts with '0' but not a valid prefix (e.g., "0.", "0123", "0"),
+      // fall through to the decimal/float logic. Note: Python 3 disallows old octal like 0123.
+    }
+
     while (isDigit(peek())) { advance(); }
     // Look for a fractional part.
     if (peek() == '.' && isDigit(peekNext())) {
@@ -468,6 +481,66 @@ class Lexer {
     addToken(TokenType.NUMBER, literalValue);
   }
 
+  /// Scans the digits of an integer literal after a base prefix (0x, 0b, 0o) has been identified.
+  ///
+  /// [prefix] should be the lowercase character 'x', 'b', or 'o'.
+  /// Parses the digits according to the specified base and adds a [TokenType.NUMBER] token.
+  /// Throws [LexerError] if no valid digits follow the prefix or if parsing fails.
+  void _scanPrefixedInteger(String prefix) {
+    int radix;
+    bool Function(String) isValidDigit;
+    String baseName;
+
+    switch (prefix) {
+      case 'x':
+        radix = 16;
+        isValidDigit = isHexDigit;
+        baseName = "hexadecimal";
+        break;
+      case 'b':
+        radix = 2;
+        isValidDigit = isBinaryDigit;
+        baseName = "binary";
+        break;
+      case 'o':
+        radix = 8;
+        isValidDigit = isOctalDigit;
+        baseName = "octal";
+        break;
+      default:
+        // This should not be reachable due to checks in number()
+        throw StateError('Internal error: Invalid prefix "$prefix" passed to _scanPrefixedInteger.');
+    }
+    int digitStart = current; // Position after the prefix character (e.g., after 'x')
+    // Consume all valid digits for the given base
+    while (isValidDigit(peek())) {
+      advance();
+    }
+
+    // Check if any digits were actually found after the prefix
+    if (current == digitStart) {
+      // Error: Prefix not followed by any digits (e.g., "0x", "0b")
+      throw LexerError(line, start - lineStart + 1, // Error starts at '0'
+          "Invalid $baseName literal: Missing digits after '0$prefix'.");
+    }
+
+    // Extract the substring containing only the digits (after the prefix)
+    String digits = source.substring(digitStart, current);
+
+    try {
+      // Parse the digits using the determined radix
+      int value = int.parse(digits, radix: radix);
+      addToken(TokenType.NUMBER, value);
+    } catch (e) {
+      // This catch might be redundant if digit checks are robust, but acts as a safeguard.
+      throw LexerError(
+        line,
+        start - lineStart + 1, // Error relates to the whole number structure
+        "Invalid $baseName literal format for '0$prefix': '$digits'",
+      );
+    }
+  }
+
   /// Scans a string literal enclosed in single (') or double (") quotes.
   /// Handles unterminated strings by throwing a [LexerError].
   /// [quoteType] is the opening quote character (' or ").
@@ -480,7 +553,6 @@ class Lexer {
         line++;
         lineStart = current + 1; // Next char starts new line
       }
-      // TODO: Handle escape sequences like \" or \\
       advance();
     }
 
@@ -534,6 +606,25 @@ class Lexer {
   /// Checks if character [c] is a digit (0-9).
   bool isDigit(String c) {
     return c.compareTo('0') >= 0 && c.compareTo('9') <= 0;
+  }
+
+  /// Checks if character [c] is a binary digit (0 or 1).
+  bool isBinaryDigit(String c) {
+     return c == '0' || c == '1';
+  }
+
+  /// Checks if character [c] is an octal digit (0-7).
+  bool isOctalDigit(String c) {
+    if (c.isEmpty) return false;
+    return c.compareTo('0') >= 0 && c.compareTo('7') <= 0;
+  }
+
+  /// Checks if character [c] is a hexadecimal digit (0-9, a-f, A-F).
+  bool isHexDigit(String c) {
+    if (c.isEmpty) return false;
+    return isDigit(c) ||
+           (c.compareTo('a') >= 0 && c.compareTo('f') <= 0) ||
+           (c.compareTo('A') >= 0 && c.compareTo('F') <= 0);
   }
 
   /// Returns true if the lexer has reached the end of the [source] string.

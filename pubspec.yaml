@@ -1,6 +1,6 @@
 name: simplepy
 description: Python subset interpreter written in pure Dart.
-version: 1.0.0
+version: 1.0.1
 
 environment:
   sdk: ^3.7.0

@@ -48,6 +48,74 @@ void main() {
       expect(tokens[7].type, TokenType.EOF);
     });
 
+     test('should tokenize hexadecimal integers', () {
+      final source = '0xFF 0x1a 0X0 0x123ABC';
+      final lexer = Lexer(source);
+      final tokens = lexer.scanTokens();
+
+      expect(tokens.length, 5); // 4 numbers + EOF
+      expect(tokens[0].type, TokenType.NUMBER);
+      expect(tokens[0].literal, 255);
+      expect(tokens[0].lexeme, '0xFF');
+      expect(tokens[1].type, TokenType.NUMBER);
+      expect(tokens[1].literal, 26);
+      expect(tokens[1].lexeme, '0x1a');
+      expect(tokens[2].type, TokenType.NUMBER);
+      expect(tokens[2].literal, 0);
+      expect(tokens[2].lexeme, '0X0');
+       expect(tokens[3].type, TokenType.NUMBER);
+      expect(tokens[3].literal, 1194684); // 0x123ABC
+      expect(tokens[3].lexeme, '0x123ABC');
+      expect(tokens[4].type, TokenType.EOF);
+    });
+
+    test('should tokenize binary integers', () {
+      final source = '0b101 0B1100 0b0';
+      final lexer = Lexer(source);
+      final tokens = lexer.scanTokens();
+
+      expect(tokens.length, 4); // 3 numbers + EOF
+      expect(tokens[0].type, TokenType.NUMBER);
+      expect(tokens[0].literal, 5);
+      expect(tokens[1].type, TokenType.NUMBER);
+      expect(tokens[1].literal, 12);
+      expect(tokens[2].type, TokenType.NUMBER);
+      expect(tokens[2].literal, 0);
+      expect(tokens[3].type, TokenType.EOF);
+    });
+
+    test('should tokenize octal integers', () {
+      final source = '0o123 0O777 0o0';
+      final lexer = Lexer(source);
+      final tokens = lexer.scanTokens();
+
+      expect(tokens.length, 4); // 3 numbers + EOF
+      expect(tokens[0].type, TokenType.NUMBER);
+      expect(tokens[0].literal, 83); // 1*64 + 2*8 + 3*1
+      expect(tokens[1].type, TokenType.NUMBER);
+      expect(tokens[1].literal, 511); // 7*64 + 7*8 + 7*1
+      expect(tokens[2].type, TokenType.NUMBER);
+      expect(tokens[2].literal, 0);
+      expect(tokens[3].type, TokenType.EOF);
+    });
+
+    test('should handle mixed numbers and prefixes', () {
+       final source = '123 0x40 0.5 0b10 99 0o7';
+       final lexer = Lexer(source);
+       final tokens = lexer.scanTokens();
+       final literals = tokens.where((t) => t.type == TokenType.NUMBER).map((t) => t.literal).toList();
+       expect(literals, equals([123, 64, 0.5, 2, 99, 7]));
+    });
+
+    test('should throw LexerError for invalid prefixed numbers', () {
+      expect(() => Lexer('0x').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Missing digits after'))));
+      expect(() => Lexer('0b').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Missing digits after'))));
+      expect(() => Lexer('0o').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Missing digits after'))));
+      expect(() => Lexer('0xG').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid hexadecimal literal'))));
+      expect(() => Lexer('0b2').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid binary literal'))));
+      expect(() => Lexer('0o8').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid octal literal'))));
+    });
+
     test('should tokenize keywords and identifiers', () {
       final source = 'if my_var else def';
       final lexer = Lexer(source);

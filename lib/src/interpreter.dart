@@ -413,14 +413,29 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   Interpreter() {
     _environment = globals; // Start in global scope
     
-    // Define built-in print functions
-    globals.define("print", NativeFunction(_printBuiltin));
-    globals.define("range", NativeFunction(_rangeBuiltin));
+    // Register all built-in functions
+    _registerBuiltin("print", NativeFunction(_printBuiltin));
+    _registerBuiltin("range", NativeFunction(_rangeBuiltin));
+    _registerBuiltin("len", NativeFunction(_lenBuiltin));
+    _registerBuiltin("str", NativeFunction(_strBuiltin));
+    _registerBuiltin("int", NativeFunction(_intBuiltin));
+    _registerBuiltin("float", NativeFunction(_floatBuiltin));
+    _registerBuiltin("bool", NativeFunction(_boolBuiltin));
+    _registerBuiltin("type", NativeFunction(_typeBuiltin));
+    _registerBuiltin("abs", NativeFunction(_absBuiltin));
+    //_registerBuiltin("input", NativeFunction(_inputBuiltin));
+    _registerBuiltin("list", NativeFunction(_listBuiltin));
+    _registerBuiltin("dict", NativeFunction(_dictBuiltin));
+    _registerBuiltin("round", NativeFunction(_roundBuiltin));
+    _registerBuiltin("min", NativeFunction(_minBuiltin));
+    _registerBuiltin("max", NativeFunction(_maxBuiltin));
+    _registerBuiltin("sum", NativeFunction(_sumBuiltin));
+    _registerBuiltin("repr", NativeFunction(_reprBuiltin));
+  }
 
-    // Add more built-ins here (e.g., len, type, input, int, str, list, dict)
-    // globals.define("len", NativeFunction(_lenBuiltin));
-    // globals.define("str", NativeFunction(_strBuiltin));
-    // ...
+  /// Helper to define built-ins in the global environment.
+  void _registerBuiltin(String name, PyCallable callable) {
+    globals.define(name, callable);
   }
 
   /// Default print implementation writing to stdout, handling partial lines.
@@ -434,6 +449,23 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       _outbuf.write(last);
     }
     print(_outbuf.toString() + first);
+  }
+
+  /// Helper to get a predictable type name string used by type() and error messages.
+  String _getTypeString(Object? obj) {
+     if (obj == null) return 'NoneType';
+     if (obj is bool) return 'bool';
+     if (obj is int) return 'int';
+     if (obj is double) return 'float';
+     if (obj is String) return 'str';
+     if (obj is List) return 'list';
+     if (obj is Map) return 'dict';
+     if (obj is PyFunction) return 'function';
+     if (obj is NativeFunction) return 'builtin_function_or_method';
+     // Add checks for custom classes if implemented:
+     // if (obj is PyInstance) return obj.klass.name;
+     // if (obj is PyClass) return 'type';
+     return 'object'; // Default fallback
   }
 
   // --- Built-in Function Implementations ---
@@ -536,6 +568,525 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       }
     }
     return result; // Return a list of integers
+  }
+
+  /// Implementation of `len(s)`
+  static Object? _lenBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('len', positionalArgs, keywordArgs, required: 1);
+    final arg = positionalArgs[0];
+    if (arg is String) return arg.length;
+    if (arg is List) return arg.length;
+    if (arg is Map) return arg.length;
+
+    throw RuntimeError(_builtInToken('len'),
+      "TypeError: object of type '${interpreter._getTypeString(arg)}' has no len()",
+    );
+  }
+
+  /// Implementation of `str(object='')`
+  static Object? _strBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('str', positionalArgs, keywordArgs, maxOptional: 1);
+    return positionalArgs.isEmpty ? "" : interpreter.stringify(positionalArgs[0]);
+  }
+
+  /// Implementation of `int(x=0, base=10)`
+  static Object? _intBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('int', positionalArgs, keywordArgs, maxOptional: 2);
+    if (positionalArgs.isEmpty) return 0;
+    final value = positionalArgs[0];
+    int? base = 10;
+
+    if (positionalArgs.length > 1) {
+      final baseArg = positionalArgs[1];
+      if (baseArg is int) base = baseArg;
+      else throw RuntimeError(_builtInToken('int'), "TypeError: 'base' argument must be an integer");
+      if (value is! String) throw RuntimeError(_builtInToken('int'), "TypeError: int() can't convert non-string with explicit base");
+      if (base != 0 && (base < 2 || base > 36)) throw RuntimeError(_builtInToken('int'), "ValueError: int() base must be >= 2 and <= 36, or 0");
+    }
+
+    if (value is int && base == 10) return value; // Common case optimization
+    if (value is double && base == 10) return value.truncate();
+    if (value is bool && base == 10) return value ? 1 : 0;
+
+    if (value is String) {
+      String strValue = value.trim();
+      int effectiveBase = base;
+      String? prefix;
+
+      if (strValue.startsWith('0x') || strValue.startsWith('0X')) { prefix = '0x'; effectiveBase = 16; }
+      else if (strValue.startsWith('0b') || strValue.startsWith('0B')) { prefix = '0b'; effectiveBase = 2; }
+      else if (strValue.startsWith('0o') || strValue.startsWith('0O')) { prefix = '0o'; effectiveBase = 8; }
+
+      if (base == 0) { // Auto-detect base only if base=0
+          if (prefix == null) effectiveBase = 10;
+          else strValue = strValue.substring(2);
+      } else if (prefix != null && base == effectiveBase) {
+          // Allow explicit base matching prefix, remove prefix
+          strValue = strValue.substring(2);
+      } else if (prefix != null && base != effectiveBase) {
+          // Mismatch: e.g., int('0x10', base=10) is an error in Python
+          throw RuntimeError(_builtInToken('int'), "ValueError: invalid literal for int() with base $base: '$value'");
+      }
+      // If base was specified (and not 0) and there's no prefix, use the specified base directly.
+
+      if (strValue.isEmpty && prefix != null) { // Handles "0x", "0b", "0o"
+         throw RuntimeError(_builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
+      }
+
+      int? parsedInt = int.tryParse(strValue, radix: effectiveBase);
+      if (parsedInt == null) {
+        throw RuntimeError(_builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
+      }
+      return parsedInt;
+    }
+
+    throw RuntimeError(_builtInToken('int'), "TypeError: int() argument must be a string, a bytes-like object or a number, not '${interpreter._getTypeString(value)}'");
+  }
+
+  /// Implementation of `float(x=0.0)`
+  static Object? _floatBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('float', positionalArgs, keywordArgs, maxOptional: 1);
+    if (positionalArgs.isEmpty) return 0.0;
+    final value = positionalArgs[0];
+
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is bool) return value ? 1.0 : 0.0;
+    if (value is String) {
+      String strValue = value.trim().toLowerCase();
+      if (strValue == 'inf' || strValue == '+inf') return double.infinity;
+      if (strValue == '-inf') return double.negativeInfinity;
+      if (strValue == 'nan') return double.nan;
+      double? parsedFloat = double.tryParse(value); // Use original case
+      if (parsedFloat != null) return parsedFloat;
+      else throw RuntimeError(_builtInToken('float'), "ValueError: could not convert string to float: '$value'");
+    }
+    throw RuntimeError(_builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${interpreter._getTypeString(value)}'");
+  }
+
+  /// Implementation of `bool(x=False)`
+  static Object? _boolBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('bool', positionalArgs, keywordArgs, maxOptional: 1);
+    return positionalArgs.isEmpty ? false : interpreter.isTruthy(positionalArgs[0]);
+  }
+
+  /// Implementation of `type(object)`
+  static Object? _typeBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('type', positionalArgs, keywordArgs, required: 1);
+    return "<class '${interpreter._getTypeString(positionalArgs[0])}'>";
+  }
+
+  /// Implementation of `abs(x)`
+  static Object? _absBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('abs', positionalArgs, keywordArgs, required: 1);
+    final arg = positionalArgs[0];
+    if (arg is int) return arg.abs();
+    if (arg is double) return arg.abs();
+    if (arg is bool) return arg ? 1 : 0; // abs(True)==1, abs(False)==0
+    throw RuntimeError(_builtInToken('abs'), "TypeError: bad operand type for abs(): '${interpreter._getTypeString(arg)}'");
+  }
+
+  /// Implementation of `input([prompt])`
+  // static Object? _inputBuiltin(
+  //   Interpreter interpreter,
+  //   List<Object?> positionalArgs,
+  //   Map<String, Object?> keywordArgs,
+  // ) {
+  //   _checkNumArgs('input', positionalArgs, keywordArgs, maxOptional: 1);
+  //   String prompt = positionalArgs.isEmpty ? "" : interpreter.stringify(positionalArgs[0]);
+  //   // Ensure prompt is printed via the interpreter's mechanism if available
+  //   interpreter._printOutput?.call(prompt);
+  //   if (interpreter._printOutput == null) {
+  //      stdout.write(prompt); // Fallback to direct stdout
+  //   }
+  //   String? line = stdin.readLineSync();
+  //   if (line == null) throw RuntimeError(_builtInToken('input'), "EOFError: EOF when reading a line");
+  //   return line;
+  // }
+
+  /// Implementation of `list([iterable])`
+  static Object? _listBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('list', positionalArgs, keywordArgs, maxOptional: 1);
+    if (positionalArgs.isEmpty) return <Object?>[]; // New empty list
+
+    final iterable = positionalArgs[0];
+    if (iterable is List) return List.from(iterable); // Return a shallow copy
+    if (iterable is String) return iterable.split(''); // List of characters
+    if (iterable is Map) return iterable.keys.toList(); // List of keys
+
+    // Check if it's an iterable result from range() which is already a List
+    // No, range() directly returns List<int> in this impl.
+
+    // TODO: Handle other potential iterable types if added (e.g., custom iterators)
+
+    throw RuntimeError(_builtInToken('list'), "TypeError: '${interpreter._getTypeString(iterable)}' object is not iterable");
+  }
+
+  /// Implementation of `dict(**kwarg)` / `dict(mapping)` / `dict(iterable)`
+  /// Simplified: Only supports `dict()` or `dict(map)` for now.
+  static Object? _dictBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    // Python's dict is versatile. This is a simplified version.
+    // It primarily handles dict() -> {} and dict(existing_map) -> copy.
+    // Keyword arguments are NOT handled here yet because _checkNumArgs doesn't support them easily.
+    // Iterables of pairs are also not handled yet.
+
+     _checkNoKeywords('dict', keywordArgs); // For this simplified version
+     _checkNumArgs('dict', positionalArgs, keywordArgs, maxOptional: 1); // 0 or 1 positional
+
+
+    if (positionalArgs.isEmpty) {
+      return <Object?, Object?>{}; // New empty dict
+    }
+
+    final arg = positionalArgs[0];
+    if (arg is Map) {
+      // Return a shallow copy
+      return Map.from(arg);
+    }
+
+    // TODO: Add support for list of pairs: [('a', 1), ('b', 2)]
+    // TODO: Add support for keyword args: dict(a=1, b=2) (needs arg handling rework)
+
+    throw RuntimeError(_builtInToken('dict'), "TypeError: cannot convert dictionary update sequence element #0 to a sequence"); // Mimic one common error
+  }
+
+  /// Implementation of `round(number[, ndigits])`
+  /// Implements Python 3's "round half to even" behavior.
+  static Object? _roundBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('round', positionalArgs, keywordArgs, required: 1, maxOptional: 1);
+    _checkNoKeywords('round', keywordArgs);
+
+    final numberArg = positionalArgs[0];
+    int ndigits = 0; // Default ndigits
+
+    if (positionalArgs.length == 2) {
+        final ndigitsArg = positionalArgs[1];
+        if (ndigitsArg == null) { // round(x, None) -> behaves like ndigits=0 but returns int
+            ndigits = 0; // Will return int later
+        } else if (ndigitsArg is int) {
+            ndigits = ndigitsArg;
+        } else if (ndigitsArg is bool) { // Python allows bools here too
+             ndigits = ndigitsArg ? 1: 0;
+        }
+         else {
+            throw RuntimeError(_builtInToken('round'), "TypeError: 'ndigits' argument must be an integer, not '${interpreter._getTypeString(ndigitsArg)}'");
+        }
+    }
+
+    num number; // Use num to handle int/double input
+    if (numberArg is num) {
+        number = numberArg;
+    } else if (numberArg is bool) {
+        number = numberArg ? 1 : 0;
+    } else {
+        throw RuntimeError(_builtInToken('round'), "TypeError: type ${interpreter._getTypeString(numberArg)} not supported");
+    }
+    // --- Perform Rounding ---
+    num factor = pow(10, ndigits);
+    // Handle potential precision issues by working with scaled value
+    // Add a small epsilon check for near-half cases if needed, but start simple.
+    num scaledValue = number * factor;
+    // Check if the scaled value is exactly halfway between two integers
+    num remainder = scaledValue.remainder(1.0);
+    num roundedScaledValue;
+    if ((remainder.abs() - 0.5).abs() < 1e-15) { // Check if effectively x.5 (handle float precision)
+      int floorInt = scaledValue.floor().toInt();
+      int ceilInt = scaledValue.ceil().toInt();
+      // Choose the even neighbor
+      if (floorInt % 2 == 0) { // is floor even?
+          roundedScaledValue = floorInt;
+      } else {
+          // If floor is odd, the ceiling must be the even neighbor
+          roundedScaledValue = ceilInt;
+      }
+    } else {
+      // Standard rounding (away from zero for > .5, towards zero for < .5)
+      // Dart's round() does round half *away* from zero. We can use it here.
+      roundedScaledValue = scaledValue.round();
+    }
+    // --- Determine Return Type and Value ---
+    if (ndigits <= 0) { // Return int if ndigits is 0 or negative
+      // For negative ndigits, we need to potentially return float if factor is not 1
+       num result = roundedScaledValue / factor;
+       // If ndigits was 0, return int. If negative, check if result is whole number.
+       if (ndigits == 0 || result.truncateToDouble() == result) {
+           return result.toInt();
+       } else {
+           // Should not happen for ndigits <= 0 after rounding logic? Test this.
+           // Python seems to return float here if original was float.
+           // Let's return int if it's a whole number result.
+           return result.toInt(); // Return int for ndigits <= 0
+       }
+
+    } else { // Return float if ndigits > 0
+        // The result should already be correctly scaled
+        num result = roundedScaledValue / factor;
+        // Ensure it's a double, even if it looks like an integer (e.g., round(123.0, 1))
+        return result.toDouble();
+    }
+  }
+
+  /// Implementation of `min(iterable, *[, key])` or `min(arg1, arg2, *args[, key])`
+  /// Simplified: No key function. Handles iterable or multiple args.
+  static Object? _minBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNoKeywords('min', keywordArgs); // Key function not supported yet
+    if (positionalArgs.isEmpty) throw RuntimeError(_builtInToken('min'), "TypeError: min expected 1 argument, got 0");
+
+    Iterable<Object?>? valuesToCompare;
+    if (positionalArgs.length == 1) {
+      // Single argument version: min(iterable)
+      final arg = positionalArgs[0];
+      if (arg is List) valuesToCompare = arg;
+      else if (arg is String) valuesToCompare = arg.split('');
+      else if (arg is Map) valuesToCompare = arg.keys;
+      else throw RuntimeError(_builtInToken('min'), "TypeError: '${interpreter._getTypeString(arg)}' object is not iterable");
+    } else {
+      // Multiple argument version: min(arg1, arg2, ...)
+      valuesToCompare = positionalArgs;
+    }
+
+    if (valuesToCompare.isEmpty) throw RuntimeError(_builtInToken('min'), "ValueError: min() arg is an empty sequence");
+
+    Object? minValue = valuesToCompare.first;
+    for (final value in valuesToCompare.skip(1)) {
+      try {
+        if (interpreter._compareValues(value, minValue) < 0) {
+          minValue = value;
+        }
+      } on RuntimeError { rethrow; } // Propagate comparison errors
+        catch(e) { // Catch unexpected comparison issues
+             throw RuntimeError(_builtInToken('min'), "Error during comparison in min(): $e");
+        }
+    }
+    return minValue;
+  }
+
+  /// Implementation of `max(iterable, *[, key])` or `max(arg1, arg2, *args[, key])`
+  /// Simplified: No key function. Handles iterable or multiple args.
+   static Object? _maxBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNoKeywords('max', keywordArgs); // Key function not supported yet
+    if (positionalArgs.isEmpty) throw RuntimeError(_builtInToken('max'), "TypeError: max expected 1 argument, got 0");
+
+    Iterable<Object?>? valuesToCompare;
+    if (positionalArgs.length == 1) {
+      final arg = positionalArgs[0];
+      if (arg is List) valuesToCompare = arg;
+      else if (arg is String) valuesToCompare = arg.split('');
+      else if (arg is Map) valuesToCompare = arg.keys;
+      else throw RuntimeError(_builtInToken('max'), "TypeError: '${interpreter._getTypeString(arg)}' object is not iterable");
+    } else {
+      valuesToCompare = positionalArgs;
+    }
+
+    if (valuesToCompare.isEmpty) throw RuntimeError(_builtInToken('max'), "ValueError: max() arg is an empty sequence");
+
+    Object? maxValue = valuesToCompare.first;
+    for (final value in valuesToCompare.skip(1)) {
+       try {
+        if (interpreter._compareValues(value, maxValue) > 0) {
+          maxValue = value;
+        }
+      } on RuntimeError { rethrow; }
+        catch(e) {
+             throw RuntimeError(_builtInToken('max'), "Error during comparison in max(): $e");
+        }
+    }
+    return maxValue;
+  }
+
+  /// Implementation of `sum(iterable[, start])`
+  /// Simplified: start defaults to 0.
+  static Object? _sumBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('sum', positionalArgs, keywordArgs, required: 1, maxOptional: 1);
+    _checkNoKeywords('sum', keywordArgs);
+
+    final iterable = positionalArgs[0];
+    Object? start = (positionalArgs.length > 1) ? positionalArgs[1] : 0; // Default start is 0
+
+    Iterable<Object?>? valuesToSum;
+    if (iterable is List) valuesToSum = iterable;
+    else if (iterable is Map) valuesToSum = iterable.values; // Sum values, not keys
+    // Cannot sum strings in Python
+    else throw RuntimeError(_builtInToken('sum'), "TypeError: '${interpreter._getTypeString(iterable)}' object is not iterable or not summable");
+
+    if (valuesToSum.isEmpty && start == 0) return 0; // Mimic python sum([]) == 0
+
+    Object? currentSum = start;
+    Token plusOperatorToken = Token(TokenType.PLUS, '+', null, 0, 0);
+    for (final value in valuesToSum) {
+       // Try adding - mimics '+' operator logic
+       try {
+          // Need a way to perform '+' operation reliably
+          currentSum = interpreter._performBinaryOperation(plusOperatorToken, currentSum, value, TokenType.PLUS);
+       } on RuntimeError catch(e) {
+           // Improve error message for sum() specifically
+           if (e.message.contains("unsupported operand type(s) for +")) {
+               throw RuntimeError(_builtInToken('sum'),
+                 "TypeError: unsupported operand type(s) for +: '${interpreter._getTypeString(currentSum)}' and '${interpreter._getTypeString(value)}' in sum()"
+               );
+           }
+           rethrow; // Re-throw other RuntimeErrors
+       }
+    }
+    return currentSum;
+  }
+
+  /// Implementation of `repr(object)`
+  static Object? _reprBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('repr', positionalArgs, keywordArgs, required: 1);
+    // Use a dedicated repr helper for more accurate representations
+    return interpreter._repr(positionalArgs[0]);
+  }
+
+  // --- Helper for accurate string representation (repr) ---
+  String _repr(Object? object) {
+      if (object == null) return "None";
+      if (object is bool) return object ? "True" : "False";
+      if (object is String) {
+          // Add quotes and escape internal quotes/backslashes
+          String escaped = object
+              .replaceAll('\\', '\\\\')
+              .replaceAll("'", "\\'")
+              .replaceAll('\n', '\\n')
+              .replaceAll('\r', '\\r')
+              .replaceAll('\t', '\\t');
+          // Prefer single quotes unless string contains single quotes but not double
+          if (escaped.contains("'") && !escaped.contains('"')) {
+              return '"$escaped"';
+          }
+          return "'$escaped'";
+      }
+      // For numbers, list, dict, etc., use stringify for now
+      // (Python's repr for float can be complex, e.g., precision)
+      if (object is List) return '[${object.map(_repr).join(', ')}]';
+      if (object is Map) return '{${object.entries.map((e) => '${_repr(e.key)}: ${_repr(e.value)}').join(', ')}}';
+
+      // Fallback for other types (numbers, functions) - could refine number formatting
+      return stringify(object);
+  }
+
+  /// Creates a dummy token for error reporting within built-ins.
+  static Token _builtInToken(String name) {
+    return Token(TokenType.IDENTIFIER, name, null, 0, 0); // No accurate location info
+  }
+
+  /// Generic argument count and keyword checker for built-ins.
+  static void _checkNumArgs(
+    String funcName,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs, // Keep this even if unused by checker for now
+    {int required = 0, int maxOptional = 0, bool allowKeywords = false})
+  {
+    if (!allowKeywords && keywordArgs.isNotEmpty) {
+      throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
+    }
+    int totalAllowed = required + maxOptional;
+    int actual = positionalArgs.length;
+
+    if (maxOptional == -1) { // Indicates variable args like min/max
+       if (actual < required) {
+            throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() expected at least $required arguments, got $actual");
+       }
+       // Max check doesn't apply
+    } else { // Fixed number of optional args
+        if (actual < required) {
+            String takes = "at least $required";
+             if (maxOptional == 0) takes = "exactly $required";
+            throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
+        }
+        if (actual > totalAllowed) {
+            String takes = "exactly $required";
+            if (maxOptional > 0 && required > 0) takes = "from $required to $totalAllowed";
+            else if (maxOptional > 0) takes = "at most $totalAllowed";
+            throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
+        }
+    }
+  }
+
+  /// Specific checker for functions that take NO keywords.
+  static void _checkNoKeywords(String funcName, Map<String, Object?> keywordArgs) {
+      if (keywordArgs.isNotEmpty) {
+           throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
+      }
+  }
+
+  // --- Comparison Helper used by min/max ---
+  int _compareValues(Object? left, Object? right) {
+     try {
+         // Use the logic from BinaryExpr comparison
+         return _compare(left, right, _builtInToken('<')); // Operator token is just for error msg context
+     } catch (e) {
+          // Rethrow comparison errors with a more generic message if needed
+          throw RuntimeError(_builtInToken('comparison'), "Error during comparison: $e");
+     }
+  }
+
+  // --- Binary Operation Helper used by sum ---
+   Object? _performBinaryOperation(Token operatorToken, Object? left, Object? right, TokenType opType) {
+     // This duplicates logic from visitBinaryExpr slightly, could be refactored
+     try {
+         // Simplified call to the core arithmetic logic
+         return _evaluateBinary(operatorToken, left, right);
+     } catch (e) {
+          // Catch and rethrow errors from the operation
+          rethrow;
+     }
   }
 
   // Helper to ensure an argument is an integer for built-ins.
@@ -949,79 +1500,81 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
   }
 
+  /// Centralized logic for evaluating binary operations.
+  Object? _evaluateBinary(Token operator, Object? left, Object? right) {
+    void checkNumbers() {
+      if (left is! num || right is! num) {
+        throw RuntimeError(operator,"TypeError: unsupported operand type(s) for ${operator.lexeme}: '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+      }
+    }
+    void checkInts() {
+      if (left is! int || right is! int) {
+        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${_getTypeString(left)}' and '${_getTypeString(right)}'. Must be integers.");
+      }
+    }
+    void checkComparable() {
+      if (!((left is num && right is num) || (left is String && right is String))) {
+        throw RuntimeError(operator, "TypeError: '${operator.lexeme}' not supported between instances of '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+      }
+    }
+    switch (operator.type) {
+      case TokenType.MINUS: checkNumbers(); return (left as num) - (right as num);
+      case TokenType.PLUS:
+        if (left is num && right is num) return left + right;
+        if (left is String && right is String) return left + right;
+        if (left is List && right is List) return [...left, ...right];
+        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for +: '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+      case TokenType.SLASH:
+        checkNumbers();
+        if (_isZero(right)) {
+          throw RuntimeError(operator,"ZeroDivisionError: float division by zero");
+        }
+        return (left as num).toDouble() / (right as num).toDouble();
+      case TokenType.SLASH_SLASH:
+        checkNumbers();
+        if (_isZero(right)) {
+          throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero");
+        } return (left as num) ~/ (right as num);
+      case TokenType.STAR:
+        if (left is num && right is num) return left * right;
+        if ((left is String || left is List) && right is int) return _multiplySequence(left!, right, operator);
+        if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, operator);
+        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for *: '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+      case TokenType.STAR_STAR:
+        checkNumbers();
+        return pow(left as num, right as num); // Might need try-catch for domain errors
+      case TokenType.PERCENT:
+        checkNumbers();
+        if (_isZero(right)) {
+          throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero");
+        } return _pythonModulo(left as num, right as num);
+      case TokenType.GREATER: checkComparable(); return _compare(left, right, operator) > 0;
+      case TokenType.GREATER_EQUAL: checkComparable(); return _compare(left, right, operator) >= 0;
+      case TokenType.LESS: checkComparable(); return _compare(left, right, operator) < 0;
+      case TokenType.LESS_EQUAL: checkComparable(); return _compare(left, right, operator) <= 0;
+      case TokenType.BANG_EQUAL: return !isEqual(left, right);
+      case TokenType.EQUAL_EQUAL: return isEqual(left, right);
+
+      case TokenType.AMPERSAND: checkInts(); return (left as int) & (right as int);
+      case TokenType.PIPE: checkInts(); return (left as int) | (right as int);
+      case TokenType.CARET: checkInts(); return (left as int) ^ (right as int);
+      case TokenType.LEFT_SHIFT: checkInts(); return (left as int) << (right as int);
+      case TokenType.RIGHT_SHIFT: checkInts(); return (left as int) >> (right as int);
+
+      default: throw RuntimeError(operator, "Internal error: Unknown binary operator type ${operator.type}");
+    }
+  }
+
+  bool _isZero(Object? obj) {
+      return (obj is num) && obj == 0;
+  }
+
   /// Visitor method for evaluating a [BinaryExpr] (arithmetic, comparison, bitwise).
-  /// Evaluates the left and right operands, performs the binary operation based on
-  /// the operator type, and returns the result. Includes type checking and handling
-  /// of Python-specific semantics (e.g., string/list concatenation/repetition, modulo).
   @override
   Object? visitBinaryExpr(BinaryExpr expr) {
     Object? left = evaluate(expr.left);
     Object? right = evaluate(expr.right);
-
-    // Helper for type checks
-     void checkInts() {
-        if (left is! int || right is! int) {
-            throw RuntimeError(expr.operator, "TypeError: unsupported operand type(s) for ${expr.operator.lexeme}: '${left?.runtimeType}' and '${right?.runtimeType}'. Operands must be integers.");
-        }
-    }
-     void checkNumbers() {
-       if (left is! num || right is! num) {
-         throw RuntimeError(expr.operator, "TypeError: unsupported operand type(s) for ${expr.operator.lexeme}: '${left?.runtimeType}' and '${right?.runtimeType}'");
-       }
-     }
-
-    switch (expr.operator.type) {
-      // --- Arithmetic ---
-      case TokenType.MINUS:
-        checkNumbers();
-        return (left as num) - (right as num);
-      case TokenType.PLUS:
-         if (left is num && right is num) return left + right;
-         if (left is String && right is String) return left + right;
-         if (left is List && right is List) return [...left, ...right];
-         throw RuntimeError(expr.operator, "TypeError: unsupported operand type(s) for +: '${left?.runtimeType}' and '${right?.runtimeType}'");
-      case TokenType.SLASH:
-        checkNumbers();
-        if (right == 0) throw RuntimeError(expr.operator,"ZeroDivisionError");
-        return (left as num).toDouble() / (right as num).toDouble();
-      case TokenType.SLASH_SLASH:
-        checkNumbers();
-        if (right == 0) throw RuntimeError(expr.operator,"ZeroDivisionError");
-        return (left as num) ~/ (right as num);
-       case TokenType.STAR:
-        if (left is num && right is num) return left * right;
-        if ((left is String || left is List) && right is int) return _multiplySequence(left!, right, expr.operator);
-        if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, expr.operator);
-        throw RuntimeError(expr.operator, "TypeError: unsupported operand type(s) for *: '${left?.runtimeType}' and '${right?.runtimeType}'");
-      case TokenType.STAR_STAR:
-        checkNumbers();
-        try {
-          return pow(left as num, right as num);
-        }  catch (e) {
-          throw RuntimeError(expr.operator, "Math error during exponentiation: $e");
-        }
-      case TokenType.PERCENT:
-        checkNumbers();
-        return _pythonModulo(left as num, right as num);
-      // --- Comparison ---
-      case TokenType.GREATER: return _compare(left, right, expr.operator) > 0;
-      case TokenType.GREATER_EQUAL: return _compare(left, right, expr.operator) >= 0;
-      case TokenType.LESS: return _compare(left, right, expr.operator) < 0;
-      case TokenType.LESS_EQUAL: return _compare(left, right, expr.operator) <= 0;
-      case TokenType.BANG_EQUAL: return !isEqual(left, right);
-      case TokenType.EQUAL_EQUAL: return isEqual(left, right);
-
-      // --- Bitwise operators (&, |, ^, <<, >>) ---
-      case TokenType.AMPERSAND:   checkInts(); return (left as int) & (right as int);
-      case TokenType.PIPE:        checkInts(); return (left as int) | (right as int);
-      case TokenType.CARET:       checkInts(); return (left as int) ^ (right as int);
-      case TokenType.LEFT_SHIFT:  checkInts(); return (left as int) << (right as int);
-      case TokenType.RIGHT_SHIFT: checkInts(); return (left as int) >> (right as int);
-
-      default:
-        // Should not happen if parser is correct
-        throw RuntimeError(expr.operator, "Unknown binary operator encountered.");
-    }
+    return _evaluateBinary(expr.operator, left, right);
   }
 
   /// Helper for comparisons, handling numbers and strings. Throws error for incompatible types.
@@ -1378,11 +1931,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
     if (object is List) {
       // Recursively stringify elements: [item1, item2]
-      return '[${object.map(stringify).join(', ')}]';
+      return '[${object.map((e) => e is String? "'$e'" : stringify(e)).join(', ')}]';
     }
     if (object is Map) {
       // {key1: value1, key2: value2}
-      return '{${object.entries.map((e) => '${stringify(e.key)}: ${stringify(e.value)}').join(', ')}}';
+      return '{${object.entries.map((e) {
+        var k=e.key;
+        if (k is String) k="'$k'";
+          return '$k: ${stringify(e.value)}';
+        }).join(', ')}}';
     }
     if (object is PyCallable) {
       return object.toString(); // Use the custom toString from PyFunction/NativeFunction
