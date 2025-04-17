@@ -26,10 +26,14 @@ abstract class ExprVisitor<R> {
   R visitBinaryExpr(BinaryExpr expr);
   /// Visits a [CallExpr] node (e.g., `func(arg1, kwarg=arg2)`).
   R visitCallExpr(CallExpr expr);
-  /// Visits a [GetExpr] node (e.g., `object[index]`).
-  R visitGetExpr(GetExpr expr);
-  /// Visits a [SetExpr] node (e.g., `object[index] = value`).
-  R visitSetExpr(SetExpr expr);
+  /// Visits a [IndexGetExpr] node (e.g., `object[index]`).
+  R visitIndexGetExpr(IndexGetExpr expr);
+  /// Visits a [IndexSetExpr] node (e.g., `object[index] = value`).
+  R visitIndexSetExpr(IndexSetExpr expr);
+  /// Visits a [AttributeGetExpr] node (e.g., `obj.attr`).
+  R visitAttributeGetExpr(AttributeGetExpr expr);
+  /// Visits a [AttributeSetExpr] node (e.g., `obj.attr = value`).
+  R visitAttributeSetExpr(AttributeSetExpr expr);
   /// Visits a [GroupingExpr] node (e.g., `(expression)`).
   R visitGroupingExpr(GroupingExpr expr);
   /// Visits a [LiteralExpr] node (e.g., `123`, `"hello"`, `True`, `None`).
@@ -44,6 +48,8 @@ abstract class ExprVisitor<R> {
   R visitUnaryExpr(UnaryExpr expr);
   /// Visits a [VariableExpr] node (e.g., `my_variable`).
   R visitVariableExpr(VariableExpr expr);
+  /// Visits a [Super] node (e.g., in `super().__init__()`).
+  R visitSuperExpr(SuperExpr expr);   // <<
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -59,7 +65,7 @@ class AssignExpr extends Expr {
 
 /// Represents an augmented assignment expression (e.g., `target += value`, `target *= value`).
 class AugAssignExpr extends Expr {
-  /// The target expression (L-value) being assigned to (e.g., [VariableExpr], [GetExpr]).
+  /// The target expression (L-value) being assigned to (e.g., [VariableExpr], [IndexGetExpr]).
   final Expr target;
   /// The token representing the augmented assignment operator (e.g., `+=`, `-=`).
   final Token operator;
@@ -104,7 +110,7 @@ class KeywordArgument extends Argument {
 
 /// Represents a function or method call expression (e.g., `callee(arg1, kw=arg2)`).
 class CallExpr extends Expr {
-  /// The expression being called (typically a [VariableExpr] or [GetExpr]).
+  /// The expression being called (typically a [VariableExpr] or [IndexGetExpr]).
   final Expr callee;
   /// The token for the closing parenthesis `)`. Used for location information.
   final Token paren;
@@ -116,20 +122,20 @@ class CallExpr extends Expr {
 }
 
 /// Represents an indexing or subscription expression used to get a value (e.g., `object[index]`).
-class GetExpr extends Expr {
+class IndexGetExpr extends Expr {
   /// The expression representing the object being indexed (e.g., list, dictionary, string).
   final Expr object;
   /// The token for the opening bracket `[`. Used for location information.
   final Token bracket;
   /// The expression providing the index or key.
   final Expr index;
-  GetExpr(this.object, this.bracket, this.index);
+  IndexGetExpr(this.object, this.bracket, this.index);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitGetExpr(this);
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexGetExpr(this);
 }
 
 /// Represents an item assignment expression using indexing (e.g., `object[index] = value`).
-class SetExpr extends Expr {
+class IndexSetExpr extends Expr {
   /// The expression representing the object whose item is being set (e.g., list, dictionary).
   final Expr object;
   /// The expression providing the index or key.
@@ -138,9 +144,37 @@ class SetExpr extends Expr {
   final Expr value;
   /// The token for the opening bracket `[`. Used for location information.
   final Token bracket;
-  SetExpr(this.object, this.index, this.value, this.bracket);
+  IndexSetExpr(this.object, this.index, this.value, this.bracket);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitSetExpr(this);
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexSetExpr(this);
+}
+
+/// Represents a dot expression to get an attribute from an object (e.g., `object.attribute`).
+class AttributeGetExpr extends Expr {
+  final Expr object; // The object whose attribute is accessed
+  final Token name;  // The identifier token for the attribute name
+  AttributeGetExpr(this.object, this.name);
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeGetExpr(this);
+}
+
+/// Represents an item assignment expression using dot notation (e.g., `object.attribute = value`).
+class AttributeSetExpr extends Expr {
+  final Expr object; // The object whose attribute is set
+  final Token name;  // The identifier token for the attribute name
+  final Expr value;  // The expression for the value to assign
+  AttributeSetExpr(this.object, this.name, this.value);
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeSetExpr(this);
+}
+
+/// Represents the `super()` expression to refer to the superclass
+class SuperExpr extends Expr {
+  final Token keyword; // The 'super' token
+  final Token method;  // The method name identifier after 'super.'
+  SuperExpr(this.keyword, this.method);
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitSuperExpr(this);
 }
 
 /// Represents a unary operation (e.g., `-operand`, `not operand`, `+operand`, `~operand`).
@@ -244,6 +278,8 @@ abstract class StmtVisitor<R> {
   R visitExpressionStmt(ExpressionStmt stmt);
   /// Visits a [FunctionStmt] node (`def` statement).
   R visitFunctionStmt(FunctionStmt stmt);
+  /// Visits a [ClassStmt] node (`class` statement).
+  R visitClassStmt(ClassStmt stmt); // <<
   /// Visits an [IfStmt] node (`if`/`elif`/`else` statement).
   R visitIfStmt(IfStmt stmt);
   /// Visits a [ReturnStmt] node (`return` statement).
@@ -268,6 +304,16 @@ class BlockStmt extends Stmt {
   BlockStmt(this.statements);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitBlockStmt(this);
+}
+
+/// Represents a class
+class ClassStmt extends Stmt {
+  final Token name;
+  final VariableExpr? superclass; // Optional superclass variable expression
+  final List<FunctionStmt> methods; // Class body contains method definitions
+  ClassStmt(this.name, this.superclass, this.methods);
+  @override
+  R accept<R>(StmtVisitor<R> visitor) => visitor.visitClassStmt(this);
 }
 
 /// Represents a statement that consists solely of an expression.
@@ -454,14 +500,27 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     }
     return parenthesize("call ${printExpr(expr.callee)}", argStrings);
   }
-
   @override
-  String visitGetExpr(GetExpr expr) =>
+  String visitIndexGetExpr(IndexGetExpr expr) =>
       parenthesize("get ${printExpr(expr.object)}", [expr.index]);
   @override
-  String visitSetExpr(SetExpr expr) => parenthesize(
-    "set ${printExpr(expr.object)}[${printExpr(expr.index)}]",
-    [expr.value]);
+  String visitIndexSetExpr(IndexSetExpr expr) => parenthesize(
+    "set ${printExpr(expr.object)}[${printExpr(expr.index)}]", [expr.value]);
+  @override
+  String visitAttributeGetExpr(AttributeGetExpr expr) =>
+      "(get_attr ${printExpr(expr.object)} . ${expr.name.lexeme})";
+  @override
+  String visitAttributeSetExpr(AttributeSetExpr expr) => parenthesize(
+    "set_attr ${printExpr(expr.object)} . ${expr.name.lexeme}", [expr.value]);
+  @override
+  String visitSuperExpr(SuperExpr expr) => "(super . ${expr.method.lexeme})";
+  @override
+  String visitClassStmt(ClassStmt stmt) {
+    var base = stmt.superclass != null ? " < ${printExpr(stmt.superclass!)}" : "";
+    var methodLines = stmt.methods.map((m) => printStmt(m)).join('\n    ');
+    var indentedMethods = methodLines.isNotEmpty ? "    $methodLines" : "";
+    return "class ${stmt.name.lexeme}$base:\n$indentedMethods\n";
+  }
   @override
   String visitGroupingExpr(GroupingExpr expr) =>
       parenthesize("group", [expr.expression]);

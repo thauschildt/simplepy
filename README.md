@@ -13,9 +13,9 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - for loops, while loops
   - functions (default arguments, *args, **kwargs are partially implemented)
   - some built-in functions: print(), range(), len(), str(), repr(), int(), float(), bool(), type(), list(), dict(), abs(), round(), min(), max(), sum()
+  - classes (no class attributes, no multiple inheritance)
 
 - Missing python features:
-  - classes
   - import
   - tuples, sets
   - list comprehensions
@@ -46,7 +46,8 @@ void main() {
 ## Additional information
 
 Basic types might behave differently in some cases compared to Python, for example, `print(1.0)` currently outputs 1 instead of 1.0.
-Some more features (some built-in functions, list.append(), maybe classes, ...) might be added soon,
+
+Some more features (list.append() etc.) might be added soon,
 but this will never become a full python interpreter.
 
 Please report any errors (except for missing features, that are not mentioned as available) at the issue tracker.

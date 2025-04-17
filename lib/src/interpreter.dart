@@ -55,6 +55,89 @@ abstract class PyCallable {
   );
 }
 
+/// Represents a class definition at runtime.
+class PyClass extends PyCallable {
+  final String name;
+  final PyClass? superclass;
+  final Map<String, PyFunction> methods;
+
+  PyClass(this.name, this.superclass, this.methods);
+
+  /// Finds a method in this class or its superclasses.
+  PyFunction? findMethod(String name) {
+    if (methods.containsKey(name)) {
+      return methods[name];
+    }
+    // Recurse up the inheritance chain
+    if (superclass != null) {
+      return superclass!.findMethod(name);
+    }
+    return null;
+  }
+
+  /// Called when the class itself is called (e.g., `MyClass()`). Creates an instance.
+  @override
+  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    PyInstance instance = PyInstance(this); // Create the instance
+    // Look for and call the initializer (__init__)
+    PyFunction? initializer = findMethod("__init__");
+    if (initializer != null) {
+      // Bind the initializer to the instance and call it
+      initializer.bind(instance).call(interpreter, positionalArgs, keywordArgs);
+    } else if (positionalArgs.isNotEmpty || keywordArgs.isNotEmpty){
+      // No __init__, but arguments were passed to the class constructor
+      Token classToken = Token(TokenType.IDENTIFIER, name, null, 0, 0);
+      throw RuntimeError(classToken, "TypeError: object constructor takes no arguments");
+    }
+    return instance; // Return the new instance
+  }
+  @override
+  String toString() => "<class '$name'>";
+}
+
+/// Represents an instance of a [PyClass] at runtime.
+class PyInstance {
+  final PyClass klass; // The class this instance belongs to
+  final Map<String, Object?> fields = {}; // Instance attributes
+  PyInstance(this.klass);
+  /// Gets an attribute or method from the instance.
+  Object? get(Token name) {
+    // 1. Check instance fields first
+    if (fields.containsKey(name.lexeme)) {
+      return fields[name.lexeme];
+    }
+    // 2. If not in fields, look for a method in the class hierarchy
+    PyFunction? method = klass.findMethod(name.lexeme);
+    if (method != null) {
+      return method.bind(this); // Return a bound method
+    }
+    // 3. Not found
+    throw RuntimeError(name, "AttributeError: '${klass.name}' object has no attribute '${name.lexeme}'");
+  }
+  /// Sets an attribute on the instance.
+  void set(Token name, Object? value) {
+    fields[name.lexeme] = value;
+  }
+  @override
+  String toString() => "<${klass.name} object>"; // Basic representation
+}
+
+/// Represents a method that has been bound to a specific instance (`self`).
+class PyBoundMethod extends PyCallable {
+  final PyInstance receiver; // The instance ('self')
+  final PyFunction method;   // The original PyFunction (method definition)
+  PyBoundMethod(this.receiver, this.method);
+  @override
+  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    // When calling a bound method, the interpreter needs to execute the
+    // original function's code within an environment where 'self' is defined.
+    // We pass the receiver (self) to the method's call implementation.
+    return method.call(interpreter, positionalArgs, keywordArgs, receiver: receiver);
+  }
+  @override
+  String toString() => "<bound method ${method.declaration.name.lexeme} of ${receiver.toString()}>";
+}
+
 /// Represents a user-defined function declared using the `def` keyword.
 ///
 /// It stores the function's definition ([declaration]) from the AST and captures
@@ -76,6 +159,11 @@ class PyFunction extends PyCallable {
   /// [closure] is the environment captured at definition time.
   PyFunction(this.declaration, this.closure, {this.isInitializer = false});
 
+  /// Creates a [PyBoundMethod] instance linking this function to a receiver instance.
+  PyBoundMethod bind(PyInstance instance) {
+    return PyBoundMethod(instance, this);
+  }
+
   /// Executes the user-defined function.
   ///
   /// This method performs the complex logic of binding the provided [positionalArgs]
@@ -88,29 +176,40 @@ class PyFunction extends PyCallable {
   /// Handles `return` statements via [ReturnValue] exceptions and implicit `None` returns.
   /// Throws [RuntimeError] for argument mismatches (wrong number, type, unexpected keywords).
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs, {PyInstance? receiver}) {
     Environment environment = Environment(closure);
+    // --- Bind 'self' if this is a method call ---
+    String? selfParamName;
+    int parameterOffset = 0; // How many parameters to skip (0 or 1 for self)
+    int paramsAvailableForArgs = declaration.params.length;
+    if (receiver != null) {
+      if (declaration.params.isEmpty) {
+        throw RuntimeError(declaration.name, "TypeError: Method '${declaration.name.lexeme}' called on instance but has no parameters (missing 'self'?)");
+      }
+      selfParamName = declaration.params[0].name.lexeme;
+      environment.define(selfParamName, receiver);
+      parameterOffset = 1; // Skip 'self' when matching against passed args
+      paramsAvailableForArgs = declaration.params.length - 1;
+    }
+    // --- Argument to Parameter Binding ---
     int positionalArgIndex = 0;
     Set<String> usedKeywordArgs = {}; // Track keywords used to detect unexpected ones
     Set<String> assignedParams = {}; // Track params assigned to prevent duplicates
-
     StarArgsParameter? starArgsParam;
     StarStarKwargsParameter? starStarKwargsParam;
     List collectedStarArgs = [];
     Map<String, Object?> collectedKwargs = {};
 
-    // --- Argument to Parameter Binding ---
-    for (Parameter param in declaration.params) {
-      String name = param.name.lexeme;
+    // Iterate through the function's DECLARED parameters, skipping 'self' if bound
+     for (int i = parameterOffset; i < declaration.params.length; i++) {
+        Parameter param = declaration.params[i];
+        String name = param.name.lexeme;
 
       if (param is RequiredParameter) {
         if (positionalArgIndex < positionalArgs.length) {
-          // Argument provided positionally
+          // Argum  ent provided positionally
           if (keywordArgs.containsKey(name)) {
-            throw RuntimeError(
-              param.name,
-              "Argument '$name' given both positionally and as keyword.",
-            );
+            throw RuntimeError(param.name, "Argument '$name' given both positionally and as keyword.");
           }
           environment.define(name, positionalArgs[positionalArgIndex]);
           assignedParams.add(name);
@@ -122,10 +221,7 @@ class PyFunction extends PyCallable {
           usedKeywordArgs.add(name); // Mark keyword as used
         } else {
           // Argument not provided
-          throw RuntimeError(
-            declaration.name,
-            "Missing required argument: '$name'.",
-          );
+          throw RuntimeError(declaration.name, "Missing required argument: '$name'.");
         }
       } else if (param is OptionalParameter) {
         if (positionalArgIndex < positionalArgs.length) {
@@ -240,14 +336,13 @@ class PyFunction extends PyCallable {
     try {
       interpreter.executeBlock(declaration.body, environment);
     } on ReturnValue catch (returnValue) {
-      // If it's an initializer (__init__), it should return None implicitly (or the instance)
-      // Standard Python __init__ returns None. If we return self, do it here.
-      return isInitializer ? closure.getThis() : returnValue.value;
+      // __init__ should always return None (implicitly done by returning the instance earlier)
+      return isInitializer ? null : returnValue.value;
     }
 
     // Implicit return None if no return statement is hit
-    // For __init__, return self (stored in closure?) or null if not class-related
-    return isInitializer ? closure.getThis() : null;
+    // For __init__, the instance was already returned by PyClass.call
+    return isInitializer ? null : null;
   }
 
   @override
@@ -308,16 +403,9 @@ class Environment {
   /// The storage for variables and other bindings defined in *this* scope.
   final Map<String, Object?> values = {};
 
-  // Flags/Fields potentially for class support (currently unused effectively):
-  /// Indicates if this environment represents a class scope.
-  final bool isClassScope;
-  /// Stores the instance ('self' or 'this') when inside a method call.
-  Object? _thisInstance;
-
   /// Creates a new environment.
   /// [enclosing] specifies the parent scope (optional, defaults to null for global).
-  /// [isClassScope] flags if this is for class definitions (defaults to false).
-  Environment([this.enclosing, this.isClassScope = false]);
+  Environment([this.enclosing]);
 
   /// Defines a new variable or binding with the given [name] and [value]
   /// strictly within the *current* environment scope. Replaces existing value if name conflicts.
@@ -338,21 +426,6 @@ class Environment {
       return enclosing!.get(name);
     }
     throw RuntimeError(name, "Undefined variable '${name.lexeme}'.");
-  }
-
-  /// Retrieves the value of 'self' or 'this' for method calls.
-  /// Searches up the environment chain. Throws if called outside an instance context.
-  Object? getThis() {
-    if (_thisInstance != null) return _thisInstance;
-    if (enclosing != null) return enclosing!.getThis();
-    // Should not happen if called correctly:
-    throw RuntimeError(Token(TokenType.IDENTIFIER, "self", null, 0, 0),
-      "'self' is not defined in this context.");
-  }
-
-  /// Binds the instance ('self'/'this') for a method call within this environment.
-  void bindThis(Object? instance) {
-    _thisInstance = instance;
   }
 
   /// Assigns a [value] to an *existing* variable represented by [name].
@@ -462,9 +535,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
      if (obj is Map) return 'dict';
      if (obj is PyFunction) return 'function';
      if (obj is NativeFunction) return 'builtin_function_or_method';
-     // Add checks for custom classes if implemented:
-     // if (obj is PyInstance) return obj.klass.name;
-     // if (obj is PyClass) return 'type';
+     if (obj is PyInstance) return obj.klass.name;
+     if (obj is PyClass) return 'type';
      return 'object'; // Default fallback
   }
 
@@ -1180,11 +1252,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   void visitFunctionStmt(FunctionStmt stmt) {
     // Create the function object, capturing the *current* environment as its closure.
-    PyFunction function = PyFunction(stmt, _environment);
-    _environment.define(
-      stmt.name.lexeme,
-      function,
-    ); // Define the function in the current scope.
+    PyFunction function = PyFunction(stmt, _environment,
+      isInitializer: stmt.name.lexeme == "__init__");
+    _environment.define(stmt.name.lexeme, function); // Define the function in the current scope.
   }
 
   /// Visitor method for executing an [IfStmt].
@@ -1208,6 +1278,59 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         execute(stmt.elseBranch!); // elseBranch is likely a BlockStmt
       }
     }
+  }
+
+  /// Defines a class.
+  @override
+  void visitClassStmt(ClassStmt stmt) {
+    PyClass? superclassValue;
+    Object? evaluatedSuper; // Temporary variable
+
+    if (stmt.superclass != null) {
+      evaluatedSuper = evaluate(stmt.superclass!);
+      if (evaluatedSuper is! PyClass) {
+        throw RuntimeError(stmt.superclass!.name, "Superclass must be a class.");
+      }
+      superclassValue = evaluatedSuper;
+    }
+
+    // 1. Define class in current scope (für references within methods)
+    _environment.define(stmt.name.lexeme, null); //temporary
+
+    // 2. create environment for class body
+    Environment classEnvironment = _environment; // default: enclosing environment
+    if (superclassValue != null) {
+      // If super class exists, create a new environment containing the current one
+      // and defining "super".
+      classEnvironment = Environment(_environment);
+      classEnvironment.define("super", superclassValue);
+    }
+
+    // 3. Process methods in class environment
+    Map<String, PyFunction> methods = {};
+    // Switch to class environment temporarily for setting up method closures correctly
+    Environment previousEnv = _environment;
+    _environment = classEnvironment;
+
+    for (FunctionStmt methodStmt in stmt.methods) {
+      // The closure of the methode *must* be the class environment, so that 'super' can be found
+      PyFunction method = PyFunction(
+        methodStmt,
+        classEnvironment, // Closure is the class environment
+        isInitializer: methodStmt.name.lexeme == "__init__"
+      );
+      methods[methodStmt.name.lexeme] = method;
+      // The method need not be defined in classEnvironment,
+      // because it can be found via self.method or Class.method.
+    }
+    // Back to enclosing environment
+    _environment = previousEnv;
+
+    // 4. Create PyClass object
+    PyClass thisClass = PyClass(stmt.name.lexeme, superclassValue, methods);
+
+    // 5. Define class in original scope, overwriting temporary null
+    _environment.assign(stmt.name, thisClass);
   }
 
   /// Visitor method for executing a [ReturnStmt].
@@ -1365,19 +1488,30 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
       _environment.assign(name, result);
       return result;
-    } else if (expr.target is GetExpr) {
-      GetExpr targetGet = expr.target as GetExpr;
+    } else if (expr.target is IndexGetExpr) {
+      IndexGetExpr targetGet = expr.target as IndexGetExpr;
       Object? object = evaluate(targetGet.object);
       Object? keyOrIndex = evaluate(targetGet.index);
       Object? currentValue = _performGetOperation(object, keyOrIndex, targetGet.bracket);
       Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
       _performSetOperation(object, keyOrIndex, result, targetGet.bracket);  
       return result;
+    } 
+    // Target: Attribute (e.g., self.count += 1)
+    else if (expr.target is AttributeGetExpr) {
+      AttributeGetExpr targetGet = expr.target as AttributeGetExpr;
+      Object? object = evaluate(targetGet.object);
+      if (object is! PyInstance) {
+          throw RuntimeError(targetGet.name, "Augmented assignment target must be an instance for attribute access.");
+      }
+      PyInstance instance = object;
+      Token name = targetGet.name;
+      Object? currentValue = instance.get(name); // Use instance getter (handles method errors etc.)
+      Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
+      instance.set(name, result); // Use instance setter
+      return result;
     } else {
-      throw RuntimeError(
-        expr.operator,
-        "Invalid target for augmented assignment.",
-      );
+      throw RuntimeError(expr.operator, "Invalid target for augmented assignment.");
     }
   }
 
@@ -1669,12 +1803,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
   }
 
-  /// Visitor method for evaluating a [GetExpr] (indexing like `obj[key]`).
+  /// Visitor method for evaluating a [IndexGetExpr] (indexing like `obj[key]`).
   /// Evaluates the [object] and the [index] expressions. Performs list, string,
   /// or dictionary lookup based on the object's type.
   /// Throws [RuntimeError] for invalid types, index out of bounds, or key errors.
   @override
-  Object? visitGetExpr(GetExpr expr) {
+  Object? visitIndexGetExpr(IndexGetExpr expr) {
     // Handles obj[index]
     Object? object = evaluate(expr.object);
     Object? key = evaluate(expr.index); // The index or key
@@ -1734,11 +1868,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     );
   }
 
-  /// Visitor method for evaluating a [SetExpr] (item assignment like `obj[key] = value`).
+  /// Visitor method for evaluating a [IndexSetExpr] (item assignment like `obj[key] = value`).
   /// Evaluates the object, index/key, and value. Performs assignment on lists or dictionaries.
   /// Throws [RuntimeError] for invalid types (e.g., string assignment), index errors, or unhashable keys.
   @override
-  Object? visitSetExpr(SetExpr expr) {
+  Object? visitIndexSetExpr(IndexSetExpr expr) {
     Object? targetObject = evaluate(expr.object);
     Object? indexOrKey = evaluate(expr.index);
     Object? valueToSet = evaluate(expr.value);
@@ -1866,6 +2000,55 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   Object? visitVariableExpr(VariableExpr expr) {
     return _environment.get(expr.name);
+  }
+
+   @override
+  Object? visitAttributeGetExpr(AttributeGetExpr expr) { // <<< NEU
+      Object? object = evaluate(expr.object);
+      if (object is PyInstance) {
+          // Let the instance handle the lookup (checks fields, then methods)
+          return object.get(expr.name);
+      }
+      // Later: Allow getting attributes from classes (static)? Modules?
+      throw RuntimeError(expr.name, "Only instances have attributes.");
+  }
+
+   @override
+  Object? visitAttributeSetExpr(AttributeSetExpr expr) {
+    Object? object = evaluate(expr.object);
+    if (object is PyInstance) {
+      Object? value = evaluate(expr.value);
+      object.set(expr.name, value); // Let instance handle setting
+      return value; // Assignment evaluates to the value
+    }
+    throw RuntimeError(expr.name, "Only instances have settable attributes.");
+  }
+
+  @override
+  Object? visitSuperExpr(SuperExpr expr) {
+      // 1. Lookup 'super' in current environment.
+      //    Since methods get their closure from the class environment, this should find the PyClass object from the super class
+      Object? superclassObj = _environment.get(expr.keyword);
+      if (superclassObj is! PyClass) {
+          // This should not happen if 'super()' is used only in class methods
+          throw RuntimeError(expr.keyword, "'super' is not bound to a class in this context.");
+      }
+      PyClass superclass = superclassObj;
+
+      // 2. Get 'self' from the current environment (that is set up during method calls).
+      Object? object = _environment.get(Token(TokenType.IDENTIFIER /* war SELF */, "self", null, 0,0));
+      if (object is! PyInstance) {
+          throw RuntimeError(expr.keyword, "'self' is not bound in this context (needed for super).");
+      }
+
+      // 3. Find the method in the super class.
+      PyFunction? method = superclass.findMethod(expr.method.lexeme);
+      if (method == null) {
+          throw RuntimeError(expr.method, "AttributeError: 'super' object (referring to class ${superclass.name}) has no attribute '${expr.method.lexeme}'");
+      }
+
+      // 4. Bind the method of the super class to the current instance ('self').
+      return method.bind(object);
   }
 
   // --- Helper Methods ---

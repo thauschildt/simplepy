@@ -86,9 +86,10 @@ class Parser {
   // --- Grammar Rule Methods ---
 
   /// Parses a declaration, which can be a function definition or any other statement.
-  /// declaration ::= functionDecl | statement ;
+  /// declaration ::= classDecl | functionDecl | statement ;
   Stmt? declaration() {
     try {
+      if (match([TokenType.CLASS])) return classDeclaration();
       if (match([TokenType.DEF])) return functionDeclaration("function");
       return statement();
     } catch (e) {
@@ -98,6 +99,45 @@ class Parser {
       synchronize();
       return null; // Indicate failure to the main loop
     }
+  }
+
+  /// Parses a class definition.
+  /// classDecl ::= "class" IDENTIFIER ( "(" IDENTIFIER ")" )? ":" block ;
+  /// Note: block for classes currently only contains methods (DEF).
+  Stmt classDeclaration() {
+    Token name = consume(TokenType.IDENTIFIER, "Expect class name.");
+    VariableExpr? superclass;
+    if (match([TokenType.LEFT_PAREN])) {
+      Token superclassName = consume(TokenType.IDENTIFIER, "Expect superclass name.");
+      superclass = VariableExpr(superclassName);
+      consume(TokenType.RIGHT_PAREN, "Expect ')' after superclass name.");
+    }
+    consume(TokenType.COLON, "Expect ':' after class name or superclass.");
+    consume(TokenType.NEWLINE, "Expect newline after ':'.");
+    consume(TokenType.INDENT, "Expect indent after ':'.");
+    List<FunctionStmt> methods = [];
+    while (!check(TokenType.DEDENT) && !isAtEnd()) {
+      // Skip blank lines within the class body
+      while(match([TokenType.NEWLINE])) {/* consume */}
+      if (check(TokenType.DEDENT) || isAtEnd()) break;
+      if (match([TokenType.DEF])) {
+        // Pass "method" to indicate context if needed by functionDeclaration
+        methods.add(functionDeclaration("method") as FunctionStmt);
+      }  else if (match([TokenType.PASS])) {
+        if (!check(TokenType.DEDENT)) {
+          match([TokenType.NEWLINE]);
+        }
+        continue;
+      } else {
+        throw error(peek(),"Only method definitions (def) or 'pass' are allowed inside a class body for now.");
+      }
+      // Consume optional newline before next method or dedent
+      if (!check(TokenType.DEDENT)) {
+        match([TokenType.NEWLINE]);
+      }
+    }
+    consume(TokenType.DEDENT, "Expect dedent to close class body.");
+    return ClassStmt(name, superclass, methods);
   }
 
   /// Parses a function definition.
@@ -389,7 +429,7 @@ class Parser {
     ])) {
       Token operator = previous();
       Expr value = assignment();
-      if (expr is VariableExpr || expr is GetExpr) {
+      if (expr is VariableExpr || expr is AttributeGetExpr || expr is IndexGetExpr) {
         return AugAssignExpr(expr, operator, value);
       }
       error(operator, "Invalid assignment target.");
@@ -399,8 +439,10 @@ class Parser {
       if (expr is VariableExpr) {
         Token name = expr.name;
         return AssignExpr(name, value);
-      } else if (expr is GetExpr) {
-        return SetExpr(expr.object, expr.index, value, expr.bracket);
+      } else if (expr is IndexGetExpr) {
+        return IndexSetExpr(expr.object, expr.index, value, expr.bracket);
+      } else if (expr is AttributeGetExpr) {
+        return AttributeSetExpr(expr.object, expr.name, value);
       }
       error(equals, "Invalid assignment target.");
     }
@@ -569,8 +611,10 @@ class Parser {
         expr = finishCall(expr); // expr becomes the CallExpr node
       } else if (match([TokenType.LEFT_BRACKET])) {
         expr = finishIndex(expr); // expr becomes the GetExpr node
+      }  else if (match([TokenType.DOT])) {
+        Token name = consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
+        expr = AttributeGetExpr(expr, name);
       }
-      // Add DOT for method calls later if needed: else if (match([TokenType.DOT])) ...
       else {
         break; // No more calls, indexing, or dot
       }
@@ -620,7 +664,7 @@ class Parser {
     Token bracket = previous(); // The '[' token
     Expr index = expression();
     consume(TokenType.RIGHT_BRACKET, "Expect ']' after index.");
-    return GetExpr(object, bracket, index);
+    return IndexGetExpr(object, bracket, index);
   }
 
   /// Parses the highest-precedence expressions: literals, variables, parenthesized expressions,
@@ -639,7 +683,14 @@ class Parser {
     if (match([TokenType.NUMBER, TokenType.STRING])) {
       return LiteralExpr(previous().literal);
     }
-
+    if (match([TokenType.SUPER])) {
+        Token keyword = previous();
+        consume(TokenType.LEFT_PAREN, "Expect '(' after 'super'.");
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after 'super('.");
+        consume(TokenType.DOT, "Expect '.' after 'super'.");
+        Token method = consume(TokenType.IDENTIFIER, "Expect superclass method name.");
+        return SuperExpr(keyword, method);
+    }
     if (match([TokenType.LEFT_BRACKET])) {
       // List literal [ ... ]
       Token bracket = previous();
