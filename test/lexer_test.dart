@@ -193,5 +193,107 @@ print(x) # Another comment
       final lexer = Lexer(source);
       expect(() => lexer.scanTokens(), throwsA(isA<LexerError>()));
     });
+
+    test('should tokenize floats in scientific notation', () {
+      final sources = {
+        '1e5': 100000.0,
+        '1.2e3': 1200.0,
+        '0.5E-1': 0.05,
+        '1E+10': 10000000000.0,
+        '123.456e-2': 1.23456,
+        '6.022E23': 6.022e23,
+        '1e0': 1.0,
+        '1e-0': 1.0,
+      };
+
+      for (var entry in sources.entries) {
+        final source = entry.key;
+        final expectedValue = entry.value;
+        final lexer = Lexer(source);
+        final tokens = lexer.scanTokens();
+        expect(tokens.length, 2, reason: "Source: $source"); // Number + EOF
+        expect(tokens[0].type, TokenType.NUMBER, reason: "Source: $source");
+        expect(tokens[0].lexeme, source, reason: "Source: $source");
+        // Use closeTo for floating point comparisons due to potential precision differences
+        expect(tokens[0].literal, closeTo(expectedValue, 1e-9), reason: "Source: $source");
+      }
+    });
+
+    test('should handle numbers adjacent to scientific notation', () {
+      final source = '1.2e3+5'; // 1200.0 + 5
+      final lexer = Lexer(source);
+      final tokens = lexer.scanTokens();
+      expect(tokens.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.PLUS, TokenType.NUMBER, TokenType.EOF]));
+      expect(tokens[0].literal, 1200.0);
+      expect(tokens[2].literal, 5);
+    });
+
+    test('should tokenize floats with exponent after dot', () {
+      final sources = {
+        '1.e5': 100000.0,
+        '0.e1': 0.0,
+        '123.E-2': 1.23,
+        '.5e2': 50.0, // Dot first, then digits, then exponent
+        '.1E-1': 0.01,
+      };
+
+      for (var entry in sources.entries) {
+        final source = entry.key;
+        final expectedValue = entry.value;
+        final lexer = Lexer(source);
+        final tokens = lexer.scanTokens();
+        expect(tokens.length, 2, reason: "Source: $source"); // Number + EOF
+        expect(tokens[0].type, TokenType.NUMBER, reason: "Source: $source");
+        expect(tokens[0].lexeme, source, reason: "Source: $source");
+        expect(tokens[0].literal, closeTo(expectedValue, 1e-9), reason: "Source: $source");
+      }
+    });
+
+    test('should distinguish DOT from start of float', () {
+        final lexer1 = Lexer('.');
+        final tokens1 = lexer1.scanTokens();
+        expect(tokens1.map((t)=>t.type).toList(), equals([TokenType.DOT, TokenType.EOF]));
+
+        final lexer2 = Lexer('.5');
+        final tokens2 = lexer2.scanTokens();
+        expect(tokens2.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.EOF]));
+        expect(tokens2[0].literal, 0.5);
+
+        final lexer3 = Lexer('obj.attr');
+        final tokens3 = lexer3.scanTokens();
+        expect(tokens3.map((t)=>t.type).toList(), equals([TokenType.IDENTIFIER, TokenType.DOT, TokenType.IDENTIFIER, TokenType.EOF]));
+    });
+
+     test('should handle number ending with dot correctly', () {
+         // Python tokenizer allows "1.". Let's see if our parser does.
+         final lexer = Lexer('1.');
+         final tokens = lexer.scanTokens();
+         expect(tokens.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.EOF]));
+         expect(tokens[0].literal, 1.0);
+
+          final lexer2 = Lexer('1. + 2');
+         final tokens2 = lexer2.scanTokens();
+         expect(tokens2.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.PLUS, TokenType.NUMBER, TokenType.EOF]));
+         expect(tokens2[0].literal, 1.0);
+     });
+
+    test('should throw LexerError for invalid dot/exponent combinations', () {
+       expect(() => Lexer('1.e').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
+       final tokensDot = Lexer('.').scanTokens();
+       expect(tokensDot.map((t)=>t.type).toList(), equals([TokenType.DOT, TokenType.EOF]));
+    });
+
+    test('should throw LexerError for invalid scientific notation', () {
+      // 'e' without digits
+      expect(() => Lexer('1e').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
+      // 'e' with sign but no digits
+      expect(() => Lexer('1e+').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
+      expect(() => Lexer('1.5e-').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
+      // Multiple 'e's (second e treated as identifier or error) - current behavior might vary
+      // expect(() => Lexer('1e5e2').scanTokens(), throwsA(isA<LexerError>())); // Or parses as 1e5 then identifier 'e2'
+      // Dot after 'e'
+      expect(() => Lexer('1e.5').scanTokens(), throwsA(isA<LexerError>())); // Should fail after 'e' parsing digits
+
+    });
   });
 }

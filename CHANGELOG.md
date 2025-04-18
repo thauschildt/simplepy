@@ -1,3 +1,6 @@
+## 1.1.1
+- added scientific float notation, e.g. 1.6e-19.
+
 ## 1.1.0
 - added classes. Class attributes and multiple inheritance are not yet supported.
 

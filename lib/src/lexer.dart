@@ -209,7 +209,14 @@ class Lexer {
       case '{': addToken(TokenType.LEFT_BRACE); break;
       case '}': addToken(TokenType.RIGHT_BRACE); break;
       case ',': addToken(TokenType.COMMA); break;
-      case '.': addToken(TokenType.DOT); break; // Might need later
+      case '.': if (isDigit(peek())) {
+          current--; // Go back to the '.'
+          number(); // number() will now see '.' at source[start]
+        } else {
+          // Just a regular DOT token
+          addToken(TokenType.DOT);
+        }
+        break;
       case '-': addToken(match('=') ? TokenType.MINUS_EQUAL : TokenType.MINUS); break;
       case '+': addToken(match('=') ? TokenType.PLUS_EQUAL : TokenType.PLUS); break;
       case '*':
@@ -301,11 +308,14 @@ class Lexer {
 
       default:
         if (isDigit(c)) {
+          // Backtrack because number() expects to start at the first digit
+          current--;
           number();
         } else if (isAlpha(c)) {
+          current--; // Backtrack for identifier()
           identifier();
         } else {
-          throw LexerError(line, currentColumn(), "Unexpected character: '$c'");
+          throw LexerError(line, currentColumn() - 1, "Unexpected character: '$c'");
         }
         break;
     }
@@ -447,39 +457,116 @@ class Lexer {
 
   /// Scans a number literal (integer or floating-point).
   void number() {
-    // Check for 0x, 0b, 0o prefixes only if the number starts with '0'
-    // and there's a next character. 'start' points to the beginning of the potential number.
-    if (source[start] == '0' && (current == start + 1) && !isAtEnd()) {
-      String prefixChar = peek().toLowerCase(); // Check next char, case-insensitive
-      if (prefixChar == 'x' || prefixChar == 'b' || prefixChar == 'o') {
-        advance(); // Consume the prefix character ('x', 'b', or 'o')
-        _scanPrefixedInteger(prefixChar); // Delegate to helper
-        return;
+    start = current; // Ensure start is set correctly before advancing
+    bool startsWithDot = peek() == '.';
+    bool isFloat = startsWithDot;
+    bool hasExponent = false;
+    bool hasFractionalDigits = false;
+    // 1. Consume leading dot if present
+    if (startsWithDot) {
+      advance(); // Consume '.'
+      // Must be followed by digits *or* 'e'/'E' eventually for validity check later
+      if (!isDigit(peek()) && peek().toLowerCase() != 'e') {
+        // This was just a DOT token
+        current = start + 1; // Reset position to only include the dot
+        addToken(TokenType.DOT);
+        return; // Not a number
       }
-      // If it starts with '0' but not a valid prefix (e.g., "0.", "0123", "0"),
-      // fall through to the decimal/float logic. Note: Python 3 disallows old octal like 0123.
     }
 
-    while (isDigit(peek())) { advance(); }
-    // Look for a fractional part.
-    if (peek() == '.' && isDigit(peekNext())) {
-      // Consume the "."
-      advance();
-      while (isDigit(peek())) { advance(); }
+    // 2. Consume integer part (if not starting with dot)
+    if (!startsWithDot) {
+      // --- Handle Prefixed Integers (0x, 0b, 0o) ---
+      if (peek() == '0' && current == start && current + 1 < source.length) {
+        String nextChar = source[current + 1].toLowerCase();
+        if (nextChar == 'x' || nextChar == 'b' || nextChar == 'o') {
+          advance(); // Consume '0'
+          advance(); // Consume 'x', 'b', or 'o'
+          _scanPrefixedInteger(nextChar);
+          return; // Prefixed integer handled
+        }
+        // Fall through for '0.' or '0' followed by other digits (decimal)
+      }
+      // --- Consume Decimal Integer Part ---
+      while (isDigit(peek())) {
+        advance();
+      }
     }
+
+    // 3. Consume optional fractional part
+    //    This runs if we didn't start with a dot AND a dot follows the integer part,
+    //    OR if we *did* start with a dot (because we need to consume the digits after it).
+    bool dotSeenAfterInteger = false;
+    if (peek() == '.') {
+        if (startsWithDot) {
+            // We already consumed the starting dot. This would be a second dot.
+            throw LexerError(line, currentColumn(), "Invalid syntax: multiple decimal points in number.");
+        }
+        isFloat = true;
+        dotSeenAfterInteger = true;
+        advance(); // Consume '.'
+    }
+    if (isFloat) { // Consume digits if it's a float (either startsWithDot or dotSeenAfterInteger)
+      int fractionStart = current;
+      while (isDigit(peek())) {
+        advance();
+      }
+      if (current > fractionStart) {
+        hasFractionalDigits = true;
+      }
+      // If startsWithDot is true, we MUST have found some fractional digits OR an exponent later
+      if (startsWithDot && !hasFractionalDigits && peek().toLowerCase() != 'e') {
+        // Example: "." followed by non-digit, non-'e'
+        throw LexerError(line, start - lineStart + 1, "Invalid number format: lone decimal point.");
+      }
+    }
+
+    // 4. Consume optional exponent part
+    if (peek().toLowerCase() == 'e') {
+      // Ensure something came before 'e'
+      if (current == start || (startsWithDot && !hasFractionalDigits)) {
+        // Handles cases like "e5" or ".e5"
+        throw LexerError(line, start - lineStart + 1,
+          "Invalid number format: exponent must follow digits or decimal point with digits.");
+      }
+      isFloat = true;
+      hasExponent = true;
+      advance(); // Consume 'e' or 'E'
+      if (peek() == '+' || peek() == '-') { advance(); } // Optional sign
+      int exponentStart = current;
+      while (isDigit(peek())) { advance(); }
+      if (current == exponentStart) {
+        throw LexerError(line, currentColumn(), "Invalid scientific notation: exponent lacks digits.");
+      }
+    }
+    
+    // --- Parse and validate the Literal Value ---
     String numberString = source.substring(start, current);
+
+    // Python allows "1." or ".5" but not just "."
+    // Our logic now prevents just "." from reaching here.
+    // Validate ".e5" - should fail because no digits after initial dot before 'e'
+    if (startsWithDot && !hasFractionalDigits && !hasExponent) {
+      // This means we only parsed "." which should have been handled earlier.
+      // This code path likely indicates an error in the logic above.
+      // However, let's treat it as just a DOT token if it occurs.
+      current = start + 1; // Reset current to only include the dot
+      addToken(TokenType.DOT);
+      return;
+    }
+
     Object literalValue;
+
     try {
-      literalValue =
-          numberString.contains('.')
-              ? double.parse(numberString)
-              : int.parse(numberString);
+      // If it has '.', 'e', or started with '.', treat as float
+      if (isFloat) {
+        literalValue = double.parse(numberString);
+      } else {
+        literalValue = int.parse(numberString);
+      }
     } catch (e) {
-      throw LexerError(
-        line,
-        start - lineStart + 1,
-        "Invalid number format: '$numberString'",
-      );
+      String formatType = isFloat ? "floating-point" : "integer";
+      throw LexerError(line, start - lineStart + 1, "Invalid $formatType number format: '$numberString'");
     }
     addToken(TokenType.NUMBER, literalValue);
   }

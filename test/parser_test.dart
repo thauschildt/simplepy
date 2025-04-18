@@ -13,6 +13,48 @@ String parseAndPrint(String source) {
   return statements.map((stmt) => printer.printStmt(stmt)).join('\n');
 }
 
+class ParseResult {
+  final List<Stmt> statements;
+  final List<String> errors;
+  ParseResult(this.statements, this.errors);
+  bool get hasErrors => errors.isNotEmpty;
+}
+
+// Helper function: Runs lexer and parser and collects errors
+ParseResult parseAndCollectErrors(String source) {
+  final lexer = Lexer(source);
+  List<Token> tokens = [];
+  List<String> collectedErrors = [];
+
+  try {
+    tokens = lexer.scanTokens();
+  } on LexerError catch (e) {
+    collectedErrors.add(e.toString());
+    return ParseResult([], collectedErrors); // empty AST, report error
+  }
+
+  void errorCallback(String message) {
+    collectedErrors.add(message);
+  }
+
+  final parser = Parser(tokens, errorCallback);
+  List<Stmt> statements = [];
+
+  try {
+    // parse() catches errors internally and calls errorCallback
+    statements = parser.parse();
+  } catch (e) {
+    // catches unexpected errors *within* the parser
+    collectedErrors.add("Unexpected Parser Crash: $e");
+  }
+  return ParseResult(statements, collectedErrors);
+}
+
+String printStatements(List<Stmt> statements) {
+   final printer = AstPrinter();
+   return statements.map((stmt) => printer.printStmt(stmt)).join('\n');
+}
+
 void main() {
   group('Parser Basics', () {
     test('should parse simple arithmetic expression statement', () {
@@ -74,5 +116,25 @@ def add(a, b=1):
       final expectedAstString = "(expr_stmt (call print 'hello' end=''))";
       expect(parseAndPrint(source), equals(expectedAstString));
      });
+
+    test('Parser should report ParseError for invalid token sequences', () {
+      final result1 = parseAndCollectErrors('..'); // Two dots
+      expect(result1.hasErrors, isTrue); // Or potentially LexerError depending on exact error reporting
+      // expect((result1.error as ParseError).message, contains("...")); // Specific message depends on where parser fails
+
+      final result2 = parseAndCollectErrors('1..'); // Number followed by dot
+      expect(result2.hasErrors, isTrue); // Expect parser error after number
+      // expect((result2.error as ParseError).message, contains("..."));
+
+      final result3 = parseAndCollectErrors('.e5'); // Dot followed by identifier
+      expect(result3.hasErrors, isTrue); // Expect parser error after dot
+      // expect((result3.error as ParseError).message, contains("..."));
+
+      final result4 = parseAndCollectErrors('1.'); // Valid float
+      expect(result4.hasErrors, isFalse);
+
+      final result5 = parseAndCollectErrors('.5'); // Valid float
+      expect(result5.hasErrors, isFalse);
+    });
   });
 }

@@ -4,7 +4,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
 
 ## Features
 - Available python features:
-  - Variable types: int (limited to dart int: &plusmn;1<<63 native ; &plusmn;1<<53 in web), float (no scientific notation 1.0e99 yet), bool, str, list, dict, NoneType<br>
+  - Variable types: int (limited to dart int: &plusmn;1<<63 native ; &plusmn;1<<53 in web), float, bool, str, list, dict, NoneType
   - arithmetic operators: + - * / // ** % and bitwise operators
   - assignments: = += -= *= /= **= //= %=
   - comparisons: == > >= < <= !=
