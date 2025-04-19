@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'ast_nodes.dart';
 import 'lexer.dart';
-
+import 'native_methods.dart' as native_methods;
 
 // Global flags indicating error states, potentially used by REPL.
 /// Flag indicating if a static error (Lexer or Parser) occurred.
@@ -53,6 +53,47 @@ abstract class PyCallable {
     List<Object?> positionalArgs,
     Map<String, Object?> keywordArgs,
   );
+}
+
+/// Signatue of native methods
+typedef PyCallableNativeImpl = Object? Function(
+  Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs
+);  
+
+/// Represents a built-in method bound to a specific native Dart object (like a List or String).
+///
+/// This allows expressions like `my_list.append(item)` to work. The attribute access
+/// `my_list.append` evaluates to an instance of this class, which is then called.
+class PyBoundNativeMethod extends PyCallable {
+  /// The native Dart object instance this method is bound to (e.g., the List).
+  final Object receiver;
+  /// The actual implementation function for this native method.
+  final PyCallableNativeImpl implementation;
+  /// The name of the method (e.g., "append"), used for error messages and toString.
+  final String methodName;
+
+  PyBoundNativeMethod(this.receiver, this.implementation, this.methodName);
+
+  /// Calls the stored native implementation function.
+  ///
+  /// It passes the interpreter, the bound receiver object, and the evaluated
+  /// arguments from the Python call site to the specialized implementation function
+  /// (like `_listAppend`, `_listInsert`, etc.).
+  @override
+  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    try {
+      // Delegate to the specific static implementation function stored
+      return implementation(interpreter, receiver, positionalArgs, keywordArgs);
+    } on RuntimeError {
+      rethrow; // Propagate runtime errors directly
+    } catch (e) {
+      // Wrap other potential errors from the implementation
+      Token errorToken = Token(TokenType.IDENTIFIER, methodName, null, 0, 0);
+      throw RuntimeError(errorToken, "Error executing native method '$methodName': $e");
+    }
+  }
+  @override
+  String toString() => "<built-in method $methodName of ${receiver.runtimeType}>";
 }
 
 /// Represents a class definition at runtime.
@@ -557,7 +598,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Helper to get a predictable type name string used by type() and error messages.
-  String _getTypeString(Object? obj) {
+  String getTypeString(Object? obj) {
      if (obj == null) return 'NoneType';
      if (obj is bool) return 'bool';
      if (obj is int) return 'int';
@@ -680,14 +721,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     List<Object?> positionalArgs,
     Map<String, Object?> keywordArgs,
   ) {
-    _checkNumArgs('len', positionalArgs, keywordArgs, required: 1);
+    native_methods.checkNumArgs('len', positionalArgs, keywordArgs, required: 1);
     final arg = positionalArgs[0];
     if (arg is String) return arg.length;
     if (arg is List) return arg.length;
     if (arg is Map) return arg.length;
 
-    throw RuntimeError(_builtInToken('len'),
-      "TypeError: object of type '${interpreter._getTypeString(arg)}' has no len()",
+    throw RuntimeError(builtInToken('len'),
+      "TypeError: object of type '${interpreter.getTypeString(arg)}' has no len()",
     );
   }
 
@@ -715,9 +756,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (positionalArgs.length > 1) {
       final baseArg = positionalArgs[1];
       if (baseArg is int) base = baseArg;
-      else throw RuntimeError(_builtInToken('int'), "TypeError: 'base' argument must be an integer");
-      if (value is! String) throw RuntimeError(_builtInToken('int'), "TypeError: int() can't convert non-string with explicit base");
-      if (base != 0 && (base < 2 || base > 36)) throw RuntimeError(_builtInToken('int'), "ValueError: int() base must be >= 2 and <= 36, or 0");
+      else throw RuntimeError(builtInToken('int'), "TypeError: 'base' argument must be an integer");
+      if (value is! String) throw RuntimeError(builtInToken('int'), "TypeError: int() can't convert non-string with explicit base");
+      if (base != 0 && (base < 2 || base > 36)) throw RuntimeError(builtInToken('int'), "ValueError: int() base must be >= 2 and <= 36, or 0");
     }
 
     if (value is int && base == 10) return value; // Common case optimization
@@ -741,22 +782,22 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           strValue = strValue.substring(2);
       } else if (prefix != null && base != effectiveBase) {
           // Mismatch: e.g., int('0x10', base=10) is an error in Python
-          throw RuntimeError(_builtInToken('int'), "ValueError: invalid literal for int() with base $base: '$value'");
+          throw RuntimeError(builtInToken('int'), "ValueError: invalid literal for int() with base $base: '$value'");
       }
       // If base was specified (and not 0) and there's no prefix, use the specified base directly.
 
       if (strValue.isEmpty && prefix != null) { // Handles "0x", "0b", "0o"
-         throw RuntimeError(_builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
+         throw RuntimeError(builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
       }
 
       int? parsedInt = int.tryParse(strValue, radix: effectiveBase);
       if (parsedInt == null) {
-        throw RuntimeError(_builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
+        throw RuntimeError(builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
       }
       return parsedInt;
     }
 
-    throw RuntimeError(_builtInToken('int'), "TypeError: int() argument must be a string, a bytes-like object or a number, not '${interpreter._getTypeString(value)}'");
+    throw RuntimeError(builtInToken('int'), "TypeError: int() argument must be a string, a bytes-like object or a number, not '${interpreter.getTypeString(value)}'");
   }
 
   /// Implementation of `float(x=0.0)`
@@ -779,9 +820,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (strValue == 'nan') return double.nan;
       double? parsedFloat = double.tryParse(value); // Use original case
       if (parsedFloat != null) return parsedFloat;
-      else throw RuntimeError(_builtInToken('float'), "ValueError: could not convert string to float: '$value'");
+      else throw RuntimeError(builtInToken('float'), "ValueError: could not convert string to float: '$value'");
     }
-    throw RuntimeError(_builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${interpreter._getTypeString(value)}'");
+    throw RuntimeError(builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${interpreter.getTypeString(value)}'");
   }
 
   /// Implementation of `bool(x=False)`
@@ -801,7 +842,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNumArgs('type', positionalArgs, keywordArgs, required: 1);
-    return "<class '${interpreter._getTypeString(positionalArgs[0])}'>";
+    return "<class '${interpreter.getTypeString(positionalArgs[0])}'>";
   }
 
   /// Implementation of `abs(x)`
@@ -815,7 +856,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (arg is int) return arg.abs();
     if (arg is double) return arg.abs();
     if (arg is bool) return arg ? 1 : 0; // abs(True)==1, abs(False)==0
-    throw RuntimeError(_builtInToken('abs'), "TypeError: bad operand type for abs(): '${interpreter._getTypeString(arg)}'");
+    throw RuntimeError(builtInToken('abs'), "TypeError: bad operand type for abs(): '${interpreter.getTypeString(arg)}'");
   }
 
   /// Implementation of `input([prompt])`
@@ -855,7 +896,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     // TODO: Handle other potential iterable types if added (e.g., custom iterators)
 
-    throw RuntimeError(_builtInToken('list'), "TypeError: '${interpreter._getTypeString(iterable)}' object is not iterable");
+    throw RuntimeError(builtInToken('list'), "TypeError: '${interpreter.getTypeString(iterable)}' object is not iterable");
   }
 
   /// Implementation of `dict(**kwarg)` / `dict(mapping)` / `dict(iterable)`
@@ -867,27 +908,42 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   ) {
     // Python's dict is versatile. This is a simplified version.
     // It primarily handles dict() -> {} and dict(existing_map) -> copy.
-    // Keyword arguments are NOT handled here yet because _checkNumArgs doesn't support them easily.
-    // Iterables of pairs are also not handled yet.
+    _checkNumArgs('dict', positionalArgs, keywordArgs, maxOptional: 1, allowKeywords: true); // 0 or 1 positional
 
-     _checkNoKeywords('dict', keywordArgs); // For this simplified version
-     _checkNumArgs('dict', positionalArgs, keywordArgs, maxOptional: 1); // 0 or 1 positional
+    final Map result = {};
 
-
-    if (positionalArgs.isEmpty) {
-      return <Object?, Object?>{}; // New empty dict
+    if (positionalArgs.isNotEmpty) {
+      final arg = positionalArgs[0];
+      if (arg is Map) {
+        result.addAll(arg);
+      } else if (arg is List) {
+        for (var item in arg) {
+          if ((item is List || item is String) && item.length == 2) {
+            final key = item[0];
+            final value = item[1];
+            if (!interpreter.isHashable(key)) {
+              throw RuntimeError(builtInToken('dict'), "TypeError: unhashable type: '${interpreter.getTypeString(key)}'");
+            }
+            result[key] = value;
+          } else if (item is List || item is String) {
+            throw RuntimeError(builtInToken('dict'),
+              "ValueError: dictionary update sequence element #${arg.indexOf(item)} has length ${item.length}; 2 is required");
+          } else {
+            throw RuntimeError(builtInToken('dict'), "ValueError: cannot convert dictionary update sequence element #${arg.indexOf(item)} to a sequence");
+          }
+        }
+      } else {
+        throw RuntimeError(builtInToken('dict'), "TypeError: '${arg.runtimeType}' object is not iterable");
+      }
     }
 
-    final arg = positionalArgs[0];
-    if (arg is Map) {
-      // Return a shallow copy
-      return Map.from(arg);
-    }
+    keywordArgs.forEach((key, value) {
+      // Keys from keyword args are always strings and thus hashable in our context
+      result[key] = value;
+    });
 
-    // TODO: Add support for list of pairs: [('a', 1), ('b', 2)]
-    // TODO: Add support for keyword args: dict(a=1, b=2) (needs arg handling rework)
-
-    throw RuntimeError(_builtInToken('dict'), "TypeError: cannot convert dictionary update sequence element #0 to a sequence"); // Mimic one common error
+    return result;
+    
   }
 
   /// Implementation of `round(number[, ndigits])`
@@ -913,7 +969,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
              ndigits = ndigitsArg ? 1: 0;
         }
          else {
-            throw RuntimeError(_builtInToken('round'), "TypeError: 'ndigits' argument must be an integer, not '${interpreter._getTypeString(ndigitsArg)}'");
+            throw RuntimeError(builtInToken('round'), "TypeError: 'ndigits' argument must be an integer, not '${interpreter.getTypeString(ndigitsArg)}'");
         }
     }
 
@@ -923,7 +979,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     } else if (numberArg is bool) {
         number = numberArg ? 1 : 0;
     } else {
-        throw RuntimeError(_builtInToken('round'), "TypeError: type ${interpreter._getTypeString(numberArg)} not supported");
+        throw RuntimeError(builtInToken('round'), "TypeError: type ${interpreter.getTypeString(numberArg)} not supported");
     }
     // --- Perform Rounding ---
     num factor = pow(10, ndigits);
@@ -978,7 +1034,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNoKeywords('min', keywordArgs); // Key function not supported yet
-    if (positionalArgs.isEmpty) throw RuntimeError(_builtInToken('min'), "TypeError: min expected 1 argument, got 0");
+    if (positionalArgs.isEmpty) throw RuntimeError(builtInToken('min'), "TypeError: min expected 1 argument, got 0");
 
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
@@ -987,13 +1043,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (arg is List) valuesToCompare = arg;
       else if (arg is String) valuesToCompare = arg.split('');
       else if (arg is Map) valuesToCompare = arg.keys;
-      else throw RuntimeError(_builtInToken('min'), "TypeError: '${interpreter._getTypeString(arg)}' object is not iterable");
+      else throw RuntimeError(builtInToken('min'), "TypeError: '${interpreter.getTypeString(arg)}' object is not iterable");
     } else {
       // Multiple argument version: min(arg1, arg2, ...)
       valuesToCompare = positionalArgs;
     }
 
-    if (valuesToCompare.isEmpty) throw RuntimeError(_builtInToken('min'), "ValueError: min() arg is an empty sequence");
+    if (valuesToCompare.isEmpty) throw RuntimeError(builtInToken('min'), "ValueError: min() arg is an empty sequence");
 
     Object? minValue = valuesToCompare.first;
     for (final value in valuesToCompare.skip(1)) {
@@ -1003,7 +1059,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         }
       } on RuntimeError { rethrow; } // Propagate comparison errors
         catch(e) { // Catch unexpected comparison issues
-             throw RuntimeError(_builtInToken('min'), "Error during comparison in min(): $e");
+             throw RuntimeError(builtInToken('min'), "Error during comparison in min(): $e");
         }
     }
     return minValue;
@@ -1017,7 +1073,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNoKeywords('max', keywordArgs); // Key function not supported yet
-    if (positionalArgs.isEmpty) throw RuntimeError(_builtInToken('max'), "TypeError: max expected 1 argument, got 0");
+    if (positionalArgs.isEmpty) throw RuntimeError(builtInToken('max'), "TypeError: max expected 1 argument, got 0");
 
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
@@ -1025,12 +1081,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (arg is List) valuesToCompare = arg;
       else if (arg is String) valuesToCompare = arg.split('');
       else if (arg is Map) valuesToCompare = arg.keys;
-      else throw RuntimeError(_builtInToken('max'), "TypeError: '${interpreter._getTypeString(arg)}' object is not iterable");
+      else throw RuntimeError(builtInToken('max'), "TypeError: '${interpreter.getTypeString(arg)}' object is not iterable");
     } else {
       valuesToCompare = positionalArgs;
     }
 
-    if (valuesToCompare.isEmpty) throw RuntimeError(_builtInToken('max'), "ValueError: max() arg is an empty sequence");
+    if (valuesToCompare.isEmpty) throw RuntimeError(builtInToken('max'), "ValueError: max() arg is an empty sequence");
 
     Object? maxValue = valuesToCompare.first;
     for (final value in valuesToCompare.skip(1)) {
@@ -1040,7 +1096,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         }
       } on RuntimeError { rethrow; }
         catch(e) {
-             throw RuntimeError(_builtInToken('max'), "Error during comparison in max(): $e");
+             throw RuntimeError(builtInToken('max'), "Error during comparison in max(): $e");
         }
     }
     return maxValue;
@@ -1063,7 +1119,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (iterable is List) valuesToSum = iterable;
     else if (iterable is Map) valuesToSum = iterable.values; // Sum values, not keys
     // Cannot sum strings in Python
-    else throw RuntimeError(_builtInToken('sum'), "TypeError: '${interpreter._getTypeString(iterable)}' object is not iterable or not summable");
+    else throw RuntimeError(builtInToken('sum'), "TypeError: '${interpreter.getTypeString(iterable)}' object is not iterable or not summable");
 
     if (valuesToSum.isEmpty && start == 0) return 0; // Mimic python sum([]) == 0
 
@@ -1077,8 +1133,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
        } on RuntimeError catch(e) {
            // Improve error message for sum() specifically
            if (e.message.contains("unsupported operand type(s) for +")) {
-               throw RuntimeError(_builtInToken('sum'),
-                 "TypeError: unsupported operand type(s) for +: '${interpreter._getTypeString(currentSum)}' and '${interpreter._getTypeString(value)}' in sum()"
+               throw RuntimeError(builtInToken('sum'),
+                 "TypeError: unsupported operand type(s) for +: '${interpreter.getTypeString(currentSum)}' and '${interpreter.getTypeString(value)}' in sum()"
                );
            }
            rethrow; // Re-throw other RuntimeErrors
@@ -1095,11 +1151,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   ) {
     _checkNumArgs('repr', positionalArgs, keywordArgs, required: 1);
     // Use a dedicated repr helper for more accurate representations
-    return interpreter._repr(positionalArgs[0]);
+    return interpreter.repr(positionalArgs[0]);
   }
 
   // --- Helper for accurate string representation (repr) ---
-  String _repr(Object? object) {
+  String repr(Object? object) {
       if (object == null) return "None";
       if (object is bool) return object ? "True" : "False";
       if (object is String) {
@@ -1116,17 +1172,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           }
           return "'$escaped'";
       }
-      // For numbers, list, dict, etc., use stringify for now
-      // (Python's repr for float can be complex, e.g., precision)
-      if (object is List) return '[${object.map(_repr).join(', ')}]';
-      if (object is Map) return '{${object.entries.map((e) => '${_repr(e.key)}: ${_repr(e.value)}').join(', ')}}';
+      if (object is List) return '[${object.map(repr).join(', ')}]';
+      if (object is Map) return '{${object.entries.map((e) => '${repr(e.key)}: ${repr(e.value)}').join(', ')}}';
 
       // Fallback for other types (numbers, functions) - could refine number formatting
       return stringify(object);
   }
 
   /// Creates a dummy token for error reporting within built-ins.
-  static Token _builtInToken(String name) {
+  static Token builtInToken(String name) {
     return Token(TokenType.IDENTIFIER, name, null, 0, 0); // No accurate location info
   }
 
@@ -1138,27 +1192,27 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     {int required = 0, int maxOptional = 0, bool allowKeywords = false})
   {
     if (!allowKeywords && keywordArgs.isNotEmpty) {
-      throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
+      throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
     }
     int totalAllowed = required + maxOptional;
     int actual = positionalArgs.length;
 
     if (maxOptional == -1) { // Indicates variable args like min/max
        if (actual < required) {
-            throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() expected at least $required arguments, got $actual");
+            throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() expected at least $required arguments, got $actual");
        }
        // Max check doesn't apply
     } else { // Fixed number of optional args
         if (actual < required) {
             String takes = "at least $required";
              if (maxOptional == 0) takes = "exactly $required";
-            throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
+            throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
         }
         if (actual > totalAllowed) {
             String takes = "exactly $required";
             if (maxOptional > 0 && required > 0) takes = "from $required to $totalAllowed";
             else if (maxOptional > 0) takes = "at most $totalAllowed";
-            throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
+            throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
         }
     }
   }
@@ -1166,7 +1220,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Specific checker for functions that take NO keywords.
   static void _checkNoKeywords(String funcName, Map<String, Object?> keywordArgs) {
       if (keywordArgs.isNotEmpty) {
-           throw RuntimeError(_builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
+           throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
       }
   }
 
@@ -1174,10 +1228,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   int _compareValues(Object? left, Object? right) {
      try {
          // Use the logic from BinaryExpr comparison
-         return _compare(left, right, _builtInToken('<')); // Operator token is just for error msg context
+         return _compare(left, right, builtInToken('<')); // Operator token is just for error msg context
      } catch (e) {
           // Rethrow comparison errors with a more generic message if needed
-          throw RuntimeError(_builtInToken('comparison'), "Error during comparison: $e");
+          throw RuntimeError(builtInToken('comparison'), "Error during comparison: $e");
      }
   }
 
@@ -1637,7 +1691,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       return;
     }
     if (object is Map) {
-      if (!_isHashable(keyOrIndex)) throw RuntimeError(bracket, "TypeError: unhashable type: '${keyOrIndex?.runtimeType ?? 'None'}'");
+      if (!isHashable(keyOrIndex)) throw RuntimeError(bracket, "TypeError: unhashable type: '${keyOrIndex?.runtimeType ?? 'None'}'");
       object[keyOrIndex] = value;
       return;
     }
@@ -1678,17 +1732,17 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   Object? _evaluateBinary(Token operator, Object? left, Object? right) {
     void checkNumbers() {
       if (left is! num || right is! num) {
-        throw RuntimeError(operator,"TypeError: unsupported operand type(s) for ${operator.lexeme}: '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+        throw RuntimeError(operator,"TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'");
       }
     }
     void checkInts() {
       if (left is! int || right is! int) {
-        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${_getTypeString(left)}' and '${_getTypeString(right)}'. Must be integers.");
+        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'. Must be integers.");
       }
     }
     void checkComparable() {
       if (!((left is num && right is num) || (left is String && right is String))) {
-        throw RuntimeError(operator, "TypeError: '${operator.lexeme}' not supported between instances of '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+        throw RuntimeError(operator, "TypeError: '${operator.lexeme}' not supported between instances of '${getTypeString(left)}' and '${getTypeString(right)}'");
       }
     }
     switch (operator.type) {
@@ -1697,7 +1751,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         if (left is num && right is num) return left + right;
         if (left is String && right is String) return left + right;
         if (left is List && right is List) return [...left, ...right];
-        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for +: '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for +: '${getTypeString(left)}' and '${getTypeString(right)}'");
       case TokenType.SLASH:
         checkNumbers();
         if (_isZero(right)) {
@@ -1713,7 +1767,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         if (left is num && right is num) return left * right;
         if ((left is String || left is List) && right is int) return _multiplySequence(left!, right, operator);
         if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, operator);
-        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for *: '${_getTypeString(left)}' and '${_getTypeString(right)}'");
+        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for *: '${getTypeString(left)}' and '${getTypeString(right)}'");
       case TokenType.STAR_STAR:
         checkNumbers();
         return pow(left as num, right as num); // Might need try-catch for domain errors
@@ -1931,7 +1985,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       targetObject[index] = valueToSet;
       return valueToSet;
     } else if (targetObject is Map) {
-      if (!_isHashable(indexOrKey)) {
+      if (!isHashable(indexOrKey)) {
         throw RuntimeError(
           expr.bracket,
           "TypeError: unhashable type: '${indexOrKey?.runtimeType ?? 'None'}'",
@@ -1991,7 +2045,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       Object? key = evaluate(expr.keys[i]);
       // TODO: Check if key is hashable (basic types are in Dart)
       // In Python, lists cannot be keys. We might need a custom hash check.
-      if (!_isHashable(key)) {
+      if (!isHashable(key)) {
         throw RuntimeError(
           expr.brace,
           "TypeError: unhashable type: '${key?.runtimeType ?? 'None'}'",
@@ -2005,7 +2059,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Helper to check if an object is suitable as a dictionary key (hashable).
   /// Mimics Python's rules (numbers, strings, booleans, None are hashable; lists, dicts are not).
-  bool _isHashable(Object? key) {
+  bool isHashable(Object? key) {
     if (key == null) return true; // None is hashable
     if (key is num || key is String || key is bool || key is PyCallable)
       return true;
@@ -2042,15 +2096,46 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     return _environment.get(expr.name);
   }
 
-   @override
+  @override
   Object? visitAttributeGetExpr(AttributeGetExpr expr) {
-      Object? object = evaluate(expr.object);
-      if (object is PyInstance) {
-          // Let the instance handle the lookup (checks fields, then methods)
-          return object.get(expr.name);
+    Object? object = evaluate(expr.object); // Evaluate the object part first
+    String name = expr.name.lexeme;         // The attribute name
+
+    PyCallableNativeImpl? impl;
+
+    // Check for methods on built-in types
+    if (object is List) {
+      impl = native_methods.listMethodImpls[name];
+      if (impl != null) {
+        return PyBoundNativeMethod(object, impl, name); // Return the bound method callable
       }
-      // Later: Allow getting attributes from classes (static)? Modules?
-      throw RuntimeError(expr.name, "Only instances have attributes.");
+    } else if (object is Map) {
+      impl = native_methods.dictMethodImpls[name];
+      if (impl != null) {
+        return PyBoundNativeMethod(object, impl, name);
+      }
+    } else if (object is String) {
+      impl = native_methods.stringMethodImpls[name];
+      if (impl != null) {
+        return PyBoundNativeMethod(object, impl, name);
+      }
+    }
+    // If it wasn't a known native method, check if it's an instance attribute/method
+    else if (object is PyInstance) {
+      try {
+        // Let the instance handle the lookup (checks fields, then class methods)
+        return object.get(expr.name);
+      } on RuntimeError catch(e) {
+        // Improve error message consistency - ensure it's an AttributeError
+        if (!e.message.startsWith("AttributeError:")) {
+          throw RuntimeError(expr.name, "AttributeError: '${object.klass.name}' object has no attribute '$name'");
+        }
+        rethrow; // Rethrow if it was already an AttributeError
+      }
+    }
+
+    // If the attribute/method wasn't found on either native types or instances
+    throw RuntimeError(expr.name, "AttributeError: '${getTypeString(object)}' object has no attribute '$name'");
   }
 
    @override
@@ -2141,12 +2226,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   String stringify(Object? object) {
     if (object == null) return "None";
     if (object is bool) return object ? "True" : "False";
-    if (object is double) {
-      // Avoid trailing .0 for whole numbers when possible
-      if (object.truncateToDouble() == object) {
-        return object.toInt().toString();
+    
+    if (object is num) {
+       // Handle NaN, Infinity for str()
+      if (object is double) {
+        if (object.isNaN) return "nan";
+        if (object.isInfinite) return object.isNegative ? "-inf" : "inf";
       }
-      return object.toString(); // Standard double representation
+      return object.toString();
     }
     if (object is String) {
       // return "'${object.replaceAll("'", "\\'")}'"; // More like repr()
@@ -2172,4 +2259,5 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     // Default fallback using Dart's toString()
     return object.toString();
   }
+
 }

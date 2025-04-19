@@ -1,3 +1,6 @@
+## 1.1.3
+- added built-in methods for list (but not `list.sort()` yet), dict, str
+
 ## 1.1.2
 - added lambda functions
 

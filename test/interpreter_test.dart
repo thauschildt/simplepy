@@ -422,7 +422,7 @@ print(float("   3.141e2   ")) # Handles whitespace and scientific notation
      test('float() without arguments should return 0.0', () {
       final result = runCode('print(float())');
       expect(result.error, isNull);
-      expect(result.output.trim(), equals('0')); // should be 0.0
+      expect(result.output.trim(), equals('0.0'));
     });
      test('float() should raise ValueError for invalid string literals', () {
        expect(runCode('float("abc")').error, isA<RuntimeError>().having((e) => e.message, 'message', contains("ValueError: could not convert string to float: 'abc'")));
@@ -498,7 +498,7 @@ print(abs(0))
 print(abs(-0.0))
 ''');
       expect(result.error, isNull);
-      expect(result.output, equals('5\n5\n5.5\n5.5\n1\n0\n0\n0\n')); // last one should be 0.0
+      expect(result.output, equals('5\n5\n5.5\n5.5\n1\n0\n0\n0.0\n'));
     });
      test('abs() should raise TypeError for invalid types', () {
         expect(runCode('abs(None)').error, isA<RuntimeError>().having((e) => e.message, 'message', contains("TypeError: bad operand type for abs(): 'NoneType'")));
@@ -549,19 +549,26 @@ d3 = {"a": 1}
 d4 = dict(d3)
 d3["b"] = 2 # Modify original
 print(d4)     # Should be copy
+d5 = dict(a=1, b=2)
+print(d5)
+d6 = dict([["c",3], ["d",[4,5]]])
+print(d6)
 ''');
        expect(result.error, isNull);
-       expect(result.output, equals('True\n{\'a\': 1}\n'));
+       expect(result.output, equals('True\n{\'a\': 1}\n{\'a\': 1, \'b\': 2}\n{\'c\': 3, \'d\': [4, 5]}\n'));
      });
-     test('dict() (simplified) should raise TypeError for non-map args', () {
+     test('dict() should raise TypeError for non-map args', () {
         expect(runCode('dict(1)').error, isA<RuntimeError>()); // Check message manually if needed, depends on impl path
         expect(runCode('dict("a")').error, isA<RuntimeError>());
         expect(runCode('dict([1])').error, isA<RuntimeError>());
      });
-      test('dict() (simplified) should raise TypeError for wrong number of arguments', () {
+      test('dict() should raise TypeError for wrong number of arguments', () {
         expect((runCode('dict(1, 2)').error as RuntimeError).message, contains('takes at most 1 positional arguments (2 given)'));
      });
-     // TODO: Add tests for dict(iterable_of_pairs) and dict(**kwargs) when implemented
+
+     test('dict() should raise TypeError for list with item of length!=2', () {
+        expect((runCode('dict([[1,2,3]])').error as RuntimeError).message, contains('ValueError'));
+     });
 
     // --- round() Tests ---
      test('round() should round numbers', () {
@@ -656,7 +663,7 @@ print(sum([1, 2, 3], 10))
 #print(sum({1:10, 2:20}.values())) # Sum dict values
 ''');
         expect(result.error, isNull);
-        expect(result.output, equals('6\n4\n0\n16\n'));
+        expect(result.output, equals('6\n4.0\n0\n16\n'));
      });
       test('sum() should raise TypeError for invalid types', () {
         expect((runCode('sum(1)').error as RuntimeError).message, contains("TypeError: 'int' object is not iterable or not summable"));
