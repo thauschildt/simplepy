@@ -136,5 +136,15 @@ def add(a, b=1):
       final result5 = parseAndCollectErrors('.5'); // Valid float
       expect(result5.hasErrors, isFalse);
     });
+
+    test('lambda syntax errors (reported by parser)', () {
+        final result1 = parseAndCollectErrors('lambda x'); // Missing colon
+        expect(result1.hasErrors, isTrue);
+        expect(result1.errors.first, contains("Expect ':' after lambda parameters"));
+
+        final result2 = parseAndCollectErrors('lambda :'); // Missing expression
+        expect(result2.hasErrors, isTrue);
+        expect(result2.errors.first, contains("Expect expression"));
+     });
   });
 }

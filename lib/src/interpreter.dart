@@ -135,18 +135,23 @@ class PyBoundMethod extends PyCallable {
     return method.call(interpreter, positionalArgs, keywordArgs, receiver: receiver);
   }
   @override
-  String toString() => "<bound method ${method.declaration.name.lexeme} of ${receiver.toString()}>";
+  String toString() => "<bound method ${method.declaration?.name.lexeme} of ${receiver.toString()}>";
 }
 
-/// Represents a user-defined function declared using the `def` keyword.
+/// Represents a user-defined function declared using the `def` keyword
+/// or the expression body of al `lambda`function.
 ///
 /// It stores the function's definition ([declaration]) from the AST and captures
 /// the lexical environment ([closure]) where the function was defined. This closure
 /// is used to resolve non-local variables when the function is called.
 class PyFunction extends PyCallable {
   /// The AST node representing the function definition (`def name(...) ...`).
-  final FunctionStmt declaration;
-
+  final FunctionStmt? declaration;
+  /// expression in case of lambda function
+  final Expr? expressionBody;
+  /// parameters of function declaration or lambda function
+  final List<Parameter> params;
+  
   /// The environment that was active when the function was defined.
   /// This enables lexical scoping (closures).
   final Environment closure;
@@ -154,10 +159,29 @@ class PyFunction extends PyCallable {
   /// Flag indicating if this function is an initializer (e.g., `__init__` if classes were supported).
   final bool isInitializer; // Currently unused but kept for potential class extension
 
-  /// Creates a callable representation of a user-defined function.
-  /// [declaration] is the function's AST node.
-  /// [closure] is the environment captured at definition time.
-  PyFunction(this.declaration, this.closure, {this.isInitializer = false});
+  /// Constructor for DEF function
+  PyFunction.fromDef(FunctionStmt this.declaration, this.closure, {this.isInitializer = false})
+    : expressionBody = null, // expressionBody is null for DEF
+      params = declaration.params;
+
+  // Constructor for LAMBDA function
+  PyFunction.fromLambda(LambdaExpr lambdaExpr, this.closure)
+    : declaration = null, // declaration is null for LAMBDA
+      expressionBody = lambdaExpr.body,
+      params = lambdaExpr.params,
+      isInitializer = false
+  {
+    // Make sure that the body is an Expr but not assignment.
+    // In case of an assignment, a SyntaxError should be thrown by the Parser,
+    // but it is easier to detect it here.
+    if (expressionBody is AssignExpr ||
+      expressionBody is AugAssignExpr ||
+      expressionBody is IndexSetExpr ||
+      expressionBody is AttributeSetExpr) {
+      Token errorToken = lambdaExpr.keyword;
+      throw RuntimeError(errorToken, "SyntaxError: invalid syntax (assignment in lambda)");
+    }
+  }
 
   /// Creates a [PyBoundMethod] instance linking this function to a receiver instance.
   PyBoundMethod bind(PyInstance instance) {
@@ -181,15 +205,15 @@ class PyFunction extends PyCallable {
     // --- Bind 'self' if this is a method call ---
     String? selfParamName;
     int parameterOffset = 0; // How many parameters to skip (0 or 1 for self)
-    int paramsAvailableForArgs = declaration.params.length;
+    int paramsAvailableForArgs = params.length;
     if (receiver != null) {
-      if (declaration.params.isEmpty) {
-        throw RuntimeError(declaration.name, "TypeError: Method '${declaration.name.lexeme}' called on instance but has no parameters (missing 'self'?)");
+      if (params.isEmpty && declaration!=null) {
+        throw RuntimeError(declaration!.name, "TypeError: Method '${declaration!.name.lexeme}' called on instance but has no parameters (missing 'self'?)");
       }
-      selfParamName = declaration.params[0].name.lexeme;
+      selfParamName = params[0].name.lexeme;
       environment.define(selfParamName, receiver);
       parameterOffset = 1; // Skip 'self' when matching against passed args
-      paramsAvailableForArgs = declaration.params.length - 1;
+      paramsAvailableForArgs = params.length - 1;
     }
     // --- Argument to Parameter Binding ---
     int positionalArgIndex = 0;
@@ -201,9 +225,9 @@ class PyFunction extends PyCallable {
     Map<String, Object?> collectedKwargs = {};
 
     // Iterate through the function's DECLARED parameters, skipping 'self' if bound
-     for (int i = parameterOffset; i < declaration.params.length; i++) {
-        Parameter param = declaration.params[i];
-        String name = param.name.lexeme;
+    for (int i = parameterOffset; i < params.length; i++) {
+      Parameter param = params[i];
+      String name = param.name.lexeme;
 
       if (param is RequiredParameter) {
         if (positionalArgIndex < positionalArgs.length) {
@@ -221,7 +245,8 @@ class PyFunction extends PyCallable {
           usedKeywordArgs.add(name); // Mark keyword as used
         } else {
           // Argument not provided
-          throw RuntimeError(declaration.name, "Missing required argument: '$name'.");
+          throw RuntimeError(declaration?.name ?? (expressionBody! as LambdaExpr).keyword,
+            "Missing required argument: '$name'.");
         }
       } else if (param is OptionalParameter) {
         if (positionalArgIndex < positionalArgs.length) {
@@ -262,8 +287,7 @@ class PyFunction extends PyCallable {
       } else if (param is StarArgsParameter) {
         starArgsParam = param; // Store to collect remaining positionals later
       } else if (param is StarStarKwargsParameter) {
-        starStarKwargsParam =
-            param; // Store to collect remaining keywords later
+        starStarKwargsParam = param; // Store to collect remaining keywords later
       }
     } // End parameter definition loop
 
@@ -282,12 +306,11 @@ class PyFunction extends PyCallable {
       // If there's no *args parameter, check for excess positional arguments
       if (positionalArgIndex < positionalArgs.length) {
         // Calculate expected number of positional params (req + opt)
-        int maxPositional =
-            declaration.params
+        int maxPositional = params
                 .where((p) => p is RequiredParameter || p is OptionalParameter)
                 .length;
         throw RuntimeError(
-          declaration.name, // Or maybe the call paren token?
+          declaration?.name ?? (expressionBody! as LambdaExpr).keyword,
           "Expected at most $maxPositional positional arguments, but got ${positionalArgs.length}.",
         );
       }
@@ -311,20 +334,20 @@ class PyFunction extends PyCallable {
       for (var key in keywordArgs.keys) {
         if (!usedKeywordArgs.contains(key)) {
           // Check if a parameter with this name exists at all
-          bool paramExists = declaration.params.any(
+          bool paramExists = params.any(
             (p) => p.name.lexeme == key,
           );
           if (paramExists) {
             // This case *shouldn't* happen if logic above is correct
             // (means keyword arg matched param name but wasn't used)
             throw RuntimeError(
-              declaration.name,
+              declaration?.name ?? (expressionBody! as LambdaExpr).keyword,
               "Internal error: Keyword argument '$key' conflict.",
             );
           } else {
             throw RuntimeError(
-              declaration
-                  .name, // Try to find token for keyword if possible from parser? Hard here.
+              declaration?.name ?? (expressionBody! as LambdaExpr).keyword,
+              // Try to find token for keyword if possible from parser? Hard here.
               "Got an unexpected keyword argument '$key'.",
             );
           }
@@ -332,21 +355,30 @@ class PyFunction extends PyCallable {
       }
     }
 
-    // --- Execute Function Body ---
-    try {
-      interpreter.executeBlock(declaration.body, environment);
-    } on ReturnValue catch (returnValue) {
-      // __init__ should always return None (implicitly done by returning the instance earlier)
-      return isInitializer ? null : returnValue.value;
+    if (expressionBody != null) { // execute lambda body
+      try {
+        return interpreter.evaluateInEnvironment(expressionBody!, environment);
+      } catch (e) {
+        Token errorToken = Token(TokenType.LAMBDA, 'lambda', null, 0, 0);
+        throw RuntimeError(errorToken, "Error during lambda execution: $e");
+      }
+    } else if (declaration != null) { // execute (def-) function
+      try {
+          interpreter.executeBlock(declaration!.body, environment);
+      } on ReturnValue catch (returnValue) {
+          return isInitializer ? null : returnValue.value;
+      }
+      return null;
+    } else {
+      // should not happen
+      throw StateError("PyFunction has neither declaration nor expression body.");
     }
-
-    // Implicit return None if no return statement is hit
-    // For __init__, the instance was already returned by PyClass.call
-    return isInitializer ? null : null;
   }
 
   @override
-  String toString() => '<fn ${declaration.name.lexeme}>';
+  String toString() => declaration != null
+    ? '<fn ${declaration!.name.lexeme}>'
+    : "<lambda>";
 }
 
 /// Wraps a native Dart function, making it callable from the interpreted language.
@@ -1252,9 +1284,17 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   void visitFunctionStmt(FunctionStmt stmt) {
     // Create the function object, capturing the *current* environment as its closure.
-    PyFunction function = PyFunction(stmt, _environment,
+    PyFunction function = PyFunction.fromDef(stmt, _environment,
       isInitializer: stmt.name.lexeme == "__init__");
     _environment.define(stmt.name.lexeme, function); // Define the function in the current scope.
+  }
+
+  @override
+  Object? visitLambdaExpr(LambdaExpr expr) {
+    // Create lambda function at runtime.
+    // The closure is the environment where the lambda was defined
+    PyFunction lambdaFunc = PyFunction.fromLambda(expr, _environment);
+    return lambdaFunc;
   }
 
   /// Visitor method for executing an [IfStmt].
@@ -1314,7 +1354,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     for (FunctionStmt methodStmt in stmt.methods) {
       // The closure of the methode *must* be the class environment, so that 'super' can be found
-      PyFunction method = PyFunction(
+      PyFunction method = PyFunction.fromDef(
         methodStmt,
         classEnvironment, // Closure is the class environment
         isInitializer: methodStmt.name.lexeme == "__init__"
@@ -2003,7 +2043,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
    @override
-  Object? visitAttributeGetExpr(AttributeGetExpr expr) { // <<< NEU
+  Object? visitAttributeGetExpr(AttributeGetExpr expr) {
       Object? object = evaluate(expr.object);
       if (object is PyInstance) {
           // Let the instance handle the lookup (checks fields, then methods)

@@ -78,6 +78,7 @@ enum TokenType {
   OR,
   NOT,
   CLASS, SUPER,
+  LAMBDA,
   // Whitespace & Control
   INDENT,
   DEDENT,
@@ -157,6 +158,7 @@ class Lexer {
     'not': TokenType.NOT,
     'class': TokenType.CLASS,
     'super': TokenType.SUPER,
+    'lambda': TokenType.LAMBDA,
   };
 
   Lexer(this.source);

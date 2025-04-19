@@ -1,3 +1,6 @@
+## 1.1.2
+- added lambda functions
+
 ## 1.1.1
 - added scientific float notation, e.g. 1.6e-19.
 

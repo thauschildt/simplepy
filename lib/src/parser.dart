@@ -489,17 +489,72 @@ class Parser {
   /// compOp     ::= "==" | "!=" | "<" | "<=" | ">" | ">=" ;
   // TODO: Add "in", "not in", "is", "is not"
   Expr comparison() {
-    Expr expr = bitwiseOr();
+    Expr expr = lambda();
     // Add 'in' operator here? Or handle separately. Let's keep it simple for now.
     while (match([
       TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL,
       TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL,
     ])) {
       Token operator = previous();
-      Expr right = bitwiseOr();
+      Expr right = lambda();
       expr = BinaryExpr(expr, operator, right);
     }
     return expr;
+  }
+
+  /// Parses a lambda expression or delegates to the next precedence level.
+  /// lambdaExpr ::= "lambda" parameters? ":" expression ;
+  Expr lambda() {
+    if (match([TokenType.LAMBDA])) {
+      Token keyword = previous();
+      // Parse parameters directly (no parentheses needed for lambda)
+      List<Parameter> parameters = _parseLambdaParameters(); // Need specific parameter parser
+      consume(TokenType.COLON, "Expect ':' after lambda parameters.");
+      Expr body = expression(); // Parse the single expression body
+      return LambdaExpr(keyword, parameters, body);
+    }
+    // If not a lambda, continue down the precedence chain
+    return bitwiseOr();
+  }
+
+  /// Helper method to parse the parameter list for a lambda expression (no parens).
+  /// Stops parsing at the COLON.
+  List<Parameter> _parseLambdaParameters() {
+    List<Parameter> parameters = [];
+    // Check if the very next token is COLON (lambda with no params)
+    if (check(TokenType.COLON)) {
+      return parameters; // Empty parameter list
+    }
+    // Logic similar to parsing parameters in functionDeclaration(), but stops at COLON instead of RIGHT_PAREN
+    bool parsingOptional = false;
+    bool parsingArgs = false;
+    bool parsingKwargs = false;
+    // TODO: check correct order of positional, optional, *args, **kwargs
+    do { // Use do-while because we checked COLON already, so at least one param expected if not empty
+      if (parameters.length >= 255) throw error(peek(), "Can't have more than 255 parameters.");
+      if (match([TokenType.STAR_STAR])) { // **kwargs
+        parsingKwargs = true; parsingOptional = false; parsingArgs = false;
+        Token paramName = consume(TokenType.IDENTIFIER, "Expect identifier after '**'.");
+        parameters.add(StarStarKwargsParameter(paramName));
+      } else if (match([TokenType.STAR])) { // *args
+        parsingArgs = true; parsingOptional = false;
+        Token paramName = consume(TokenType.IDENTIFIER, "Expect identifier after '*'.");
+        parameters.add(StarArgsParameter(paramName));
+      } else { // Required or Optional
+        Token paramName = consume(TokenType.IDENTIFIER, "Expect parameter name.");
+        if (match([TokenType.EQUAL])) { // Optional
+          parsingOptional = true;
+          Expr defaultValue = expression();
+          parameters.add(OptionalParameter(paramName, defaultValue));
+        } else { // Required
+          if (parsingOptional) throw error(paramName, "Non-default argument follows default argument.");
+          parameters.add(RequiredParameter(paramName));
+        }
+      }
+      // Continue if a comma follows, otherwise break (expecting COLON next)
+    } while (match([TokenType.COMMA]));
+    // After the loop, the next token MUST be COLON (consumed by the caller)
+    return parameters;
   }
 
   /// Parses bitwise OR expressions. ('|')

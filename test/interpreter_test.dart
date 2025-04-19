@@ -694,4 +694,89 @@ print(repr(print))
      });
 
   });
+
+  group('Interpreter Lambdas', () {
+
+    test('should create and call simple lambda', () {
+      final source = '''
+f = lambda x: x * 2
+print(f(5))
+g = lambda: 10 # No arguments
+print(g())
+''';
+      final result = runCode(source);
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals('10\n10\n'));
+    });
+
+    test('should create and call lambda with multiple args', () {
+      final source = '''
+adder = lambda a, b: a + b
+print(adder(3, 4))
+print(adder("x", "y"))
+''';
+      final result = runCode(source);
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals('7\nxy\n'));
+    });
+
+     test('lambda should capture closure variables', () {
+      final source = '''
+def make_adder(n):
+  return lambda x: x + n
+
+add5 = make_adder(5)
+add10 = make_adder(10)
+print(add5(3))
+print(add10(3))
+''';
+      final result = runCode(source);
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals('8\n13\n'));
+    });
+
+     test('lambda with default arguments', () {
+      final source = '''
+power = lambda base, exp=2: base ** exp
+print(power(3))    # Use default exp=2
+print(power(3, 3)) # Provide exp
+''';
+      final result = runCode(source);
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals('9\n27\n'));
+    });
+
+    test('lambda passed as argument (requires supporting map/filter or custom func)', () {
+        // This test requires a way to pass functions. Let's define a simple apply func.
+        final source = '''
+def apply_func(f, val):
+  return f(val)
+
+result = apply_func(lambda y: y * 10, 5)
+print(result)
+
+def apply_to_list(func, item):
+    return func(item)
+''';
+         final result = runCode(source); // Test only apply_func for now
+         expect(result.error, isNull, reason: result.error?.toString());
+         expect(result.output, contains('50\n')); // Check first print
+          // Cannot easily test the list part without list append method
+     });
+
+     test('lambda body cannot contain assignment statements', () {
+        // Assignment (=) is not allowed directly in lambda body
+        final source = 'f = lambda x: y = x';
+        final result = runCode(source); // Fehler sollte beim Auswerten der Zuweisung auftreten
+        expect(result.hasRuntimeError, isTrue);
+        expect((result.error as RuntimeError).message, contains("SyntaxError: invalid syntax (assignment in lambda)"));
+
+        // Augmented Assignment (+=) is also not allowed
+         final source2 = 'f = lambda x: x += 1';
+         final result2 = runCode(source2);
+         expect(result2.hasRuntimeError, isTrue);
+         expect((result2.error as RuntimeError).message, contains("SyntaxError: invalid syntax (assignment in lambda)"));
+     });
+
+  });
 }

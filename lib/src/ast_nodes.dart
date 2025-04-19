@@ -48,8 +48,10 @@ abstract class ExprVisitor<R> {
   R visitUnaryExpr(UnaryExpr expr);
   /// Visits a [VariableExpr] node (e.g., `my_variable`).
   R visitVariableExpr(VariableExpr expr);
-  /// Visits a [Super] node (e.g., in `super().__init__()`).
-  R visitSuperExpr(SuperExpr expr);   // <<
+  /// Visits a [SuperExpr] node (e.g., in `super().__init__()`).
+  R visitSuperExpr(SuperExpr expr);
+  /// Visits a [LambdaExpr] node (e.g., `lambda x: x**2`).
+  R visitLambdaExpr(LambdaExpr expr);
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -175,6 +177,16 @@ class SuperExpr extends Expr {
   SuperExpr(this.keyword, this.method);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitSuperExpr(this);
+}
+
+/// Represents a lambda expression (e.g., `lambda x: x**2`)
+class LambdaExpr extends Expr {
+  final Token keyword; // The 'lambda' token
+  final List<Parameter> params; // Parameters (same structure as functions)
+  final Expr body; // The single expression body
+  LambdaExpr(this.keyword, this.params, this.body);
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitLambdaExpr(this);
 }
 
 /// Represents a unary operation (e.g., `-operand`, `not operand`, `+operand`, `~operand`).
@@ -564,7 +576,6 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
   String visitExpressionStmt(ExpressionStmt stmt) =>
       parenthesize("expr_stmt", [stmt.expression]);
 
-  // Updated FunctionStmt printing
   @override
   String visitFunctionStmt(FunctionStmt stmt) {
     List<String> paramStrings = [];
@@ -586,6 +597,24 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     // Ensure initial indentation for body if not empty
     var indentedBody = body.isNotEmpty ? "    $body" : "";
     return "def ${stmt.name.lexeme}(${paramStrings.join(', ')}):\n$indentedBody\n";
+  }
+
+  @override
+  String visitLambdaExpr(LambdaExpr expr) {
+    List<String> paramStrings = [];
+    // Reuse parameter printing logic if possible, or simplify:
+    for (var param in expr.params) {
+      if (param is RequiredParameter) {
+        paramStrings.add(param.name.lexeme);
+      } else if (param is OptionalParameter) {
+        paramStrings.add("${param.name.lexeme}=${printExpr(param.defaultValue)}");
+      } else if (param is StarArgsParameter) {
+        paramStrings.add("*${param.name.lexeme}");
+      } else if (param is StarStarKwargsParameter) {
+        paramStrings.add("**${param.name.lexeme}");
+      }
+    }
+    return parenthesize("lambda (${paramStrings.join(', ')})", [expr.body]);
   }
 
   @override
