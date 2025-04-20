@@ -1,3 +1,6 @@
+## 1.1.4 (branch stoppable-async)
+- made interpreter async with possibility to stop execution
+
 ## 1.1.3
 - added built-in methods for list (but not `list.sort()` yet), dict, str
 

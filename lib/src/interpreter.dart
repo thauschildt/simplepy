@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 
 import 'ast_nodes.dart';
 import 'lexer.dart';
@@ -33,6 +34,14 @@ class RuntimeError implements Exception {
 class ReturnValue implements Exception {
   final Object? value;
   ReturnValue(this.value);
+}
+
+// StopExecution Exception thrown when the interpreter gets interrupted
+class StopExecution implements Exception {
+  final String message = "Execution stopped by user request.";
+  StopExecution();
+  @override
+  String toString() => message;
 }
 
 /// Interface for objects that can be called like functions within the interpreted language.
@@ -241,7 +250,8 @@ class PyFunction extends PyCallable {
   /// Handles `return` statements via [ReturnValue] exceptions and implicit `None` returns.
   /// Throws [RuntimeError] for argument mismatches (wrong number, type, unexpected keywords).
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs, {PyInstance? receiver}) {
+  Future<Object?> call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs,
+    {PyInstance? receiver}) async {
     Environment environment = Environment(closure);
     // --- Bind 'self' if this is a method call ---
     String? selfParamName;
@@ -311,7 +321,7 @@ class PyFunction extends PyCallable {
           Object? defaultValue;
           try {
             // Use a helper to evaluate in the correct scope without changing the *current* interpreter env
-            defaultValue = interpreter.evaluateInEnvironment(
+            defaultValue = await interpreter.evaluateInEnvironment(
               param.defaultValue,
               closure,
             );
@@ -398,14 +408,14 @@ class PyFunction extends PyCallable {
 
     if (expressionBody != null) { // execute lambda body
       try {
-        return interpreter.evaluateInEnvironment(expressionBody!, environment);
+        return await interpreter.evaluateInEnvironment(expressionBody!, environment);
       } catch (e) {
         Token errorToken = Token(TokenType.LAMBDA, 'lambda', null, 0, 0);
         throw RuntimeError(errorToken, "Error during lambda execution: $e");
       }
     } else if (declaration != null) { // execute (def-) function
       try {
-          interpreter.executeBlock(declaration!.body, environment);
+        await interpreter.executeBlock(declaration!.body, environment);
       } on ReturnValue catch (returnValue) {
           return isInitializer ? null : returnValue.value;
       }
@@ -554,6 +564,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Used to validate `break` and `continue` statements.
   bool _isInLoop = false;
 
+  /// flag to stop the execution
+  bool _shouldStop = false;
+  bool get shouldStop => _shouldStop;
+  int _lastYieldTimestamp = 0;
+  final int _yieldIntervalMs = 200;
+
   /// Creates a new Interpreter instance.
   /// Initializes the global environment and defines built-in functions like `print` and `range`.
   Interpreter() {
@@ -577,6 +593,23 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("max", NativeFunction(_maxBuiltin));
     _registerBuiltin("sum", NativeFunction(_sumBuiltin));
     _registerBuiltin("repr", NativeFunction(_reprBuiltin));
+  }
+
+  // Helper to yield and checking the stop flag
+  Future<void> _yieldAndCheckStop() async {
+    if (_shouldStop) {
+      throw StopExecution();
+    }
+    // Event loop gets control to allow for ui updates etc.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastYieldTimestamp > _yieldIntervalMs) {
+      _lastYieldTimestamp = now;
+      await Future.delayed(Duration.zero);
+    }
+    // check again, in case stop was requested during delay
+    if (_shouldStop) {
+      throw StopExecution();
+    }
   }
 
   /// Helper to define built-ins in the global environment.
@@ -1258,57 +1291,75 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Interprets a list of top-level [statements] (the AST).
   ///
   /// This is the main entry point to start execution. It iterates through the
-  /// statements, calling [execute] for each one.
+  /// statements, calling [execute] for each one and yielding periodically.
   /// Catches and reports [RuntimeError]s.
   /// Allows providing optional callbacks: [printCallback] to handle `print` output,
   /// and [errorCallback] to handle runtime error messages.
-  void interpret(
+  /// Use the `stop()` method to signal interruption.
+  Future<void> interpret (
     List<Stmt> statements, [
     void Function(String)? printCallback,
     void Function(String)? errorCallback,
-  ]) {
+  ])  async {
     _print = printCallback ?? _printWithBuffer;
+    _shouldStop = false; // Reset stop flag at the beginning
+    final reportError = errorCallback ?? (String s) => print("Error: $s");
+
     try {
       for (final statement in statements) {
-        execute(statement);
+        await _yieldAndCheckStop();
+        await execute(statement);
       }
+    } on StopExecution catch (e) {
+        print("Interpreter stopped: ${e.message}");
+        reportError(e.message);
+        hadRuntimeError = true;
     } on RuntimeError catch (e) {
       // TODO: Improve error reporting context (stack trace?)
-      if (errorCallback != null) errorCallback(e.toString());
-      print(e); // Report runtime errors
-      // Set flag for REPL?
+      reportError(e.message); // Report runtime errors
       hadRuntimeError = true; // Assuming hadRuntimeError is defined globally for REPL
     } on ReturnValue catch (_) {
       // A ReturnValue exception should only be caught inside a function call.
       // If it reaches here, it's an error (return outside function).
-      if (errorCallback != null) errorCallback("SyntaxError: 'return' outside function");
-      print(
-        RuntimeError(
-          Token(TokenType.RETURN, 'return', null, 0, 0),
-          "SyntaxError: 'return' outside function",
-        ),
-      ); // Python gives SyntaxError
-      hadRuntimeError = true;
+      final msg = "SyntaxError: 'return' outside function";
+        final token = Token(TokenType.RETURN, 'return', null, 0, 0);
+        print(RuntimeError(token, msg));
+        reportError(msg);
+        hadRuntimeError = true;
+    } catch (e, stackTrace) { // Fängt unerwartete Fehler
+       final msg = "Unexpected interpreter error: $e\n$stackTrace";
+       print(msg);
+       reportError(msg);
+       hadRuntimeError = true;
+    } finally {
+      _shouldStop = false; // Reset flag am Ende
     }
+  }
+
+  /// Signals the interpreter to stop execution at the next checkpoint.
+  void stop() {
+    print("interpreter: shouldStop!!!");
+    _shouldStop = true;
   }
 
   // --- Statement Execution ---
 
   /// Executes a single [Stmt] node by dispatching to the appropriate `visit` method.
-  void execute(Stmt stmt) {
-    stmt.accept(this);
+  Future<void> execute(Stmt stmt) async {
+    await stmt.accept(this);
   }
 
   /// Executes a block of [statements] within a specific [environment].
   /// Sets the interpreter's current environment to the given one for the duration
   /// of the block's execution and restores the previous environment afterwards.
   /// Crucial for function calls and potentially other scoped constructs.
-    void executeBlock(List<Stmt> statements, Environment environment) {
+  Future<void> executeBlock(List<Stmt> statements, Environment environment) async {
     Environment previous = _environment;
     try {
       _environment = environment; // Switch to the new environment
       for (final statement in statements) {
-        execute(statement);
+        await _yieldAndCheckStop();
+        await execute(statement);
       }
     } finally {
       _environment = previous; // Restore previous environment when block exits
@@ -1319,32 +1370,35 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Simply executes the statements within the current environment.
   /// Note: Scope creation is handled by the calling context (e.g., `executeBlock`).
   @override
-  void visitBlockStmt(BlockStmt stmt) {
+  Future<void> visitBlockStmt(BlockStmt stmt) async {
     for (final statement in stmt.statements) {
-      execute(statement);
+      await _yieldAndCheckStop();
+      await execute(statement);
     }
   }
 
   /// Visitor method for executing an [ExpressionStmt].
   /// Evaluates the expression and discards the result.
   @override
-  void visitExpressionStmt(ExpressionStmt stmt) {
-    evaluate(stmt.expression);
+  Future<void> visitExpressionStmt(ExpressionStmt stmt) async {
+    await evaluate(stmt.expression);
+    await Future.value(); // need Future return type
   }
 
   /// Visitor method for handling a [FunctionStmt] (function definition).
   /// Creates a [PyFunction] object, capturing the current environment as its closure,
   /// and defines it in the current environment.
   @override
-  void visitFunctionStmt(FunctionStmt stmt) {
+  Future<void> visitFunctionStmt(FunctionStmt stmt) async {
     // Create the function object, capturing the *current* environment as its closure.
     PyFunction function = PyFunction.fromDef(stmt, _environment,
       isInitializer: stmt.name.lexeme == "__init__");
     _environment.define(stmt.name.lexeme, function); // Define the function in the current scope.
+    await Future.value();
   }
 
   @override
-  Object? visitLambdaExpr(LambdaExpr expr) {
+  Future<Object?> visitLambdaExpr(LambdaExpr expr) async {
     // Create lambda function at runtime.
     // The closure is the environment where the lambda was defined
     PyFunction lambdaFunc = PyFunction.fromLambda(expr, _environment);
@@ -1356,32 +1410,33 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// If falsey, evaluates `elif` conditions sequentially, executing the first truthy one.
   /// Executes `elseBranch` if no previous condition was met.
   @override
-  void visitIfStmt(IfStmt stmt) {
-    if (isTruthy(evaluate(stmt.condition))) {
-      execute(stmt.thenBranch); // thenBranch is likely a BlockStmt
+  Future<void> visitIfStmt(IfStmt stmt) async {
+    if (isTruthy(await evaluate(stmt.condition))) {
+      await execute(stmt.thenBranch); // thenBranch is likely a BlockStmt
     } else {
       bool executedElif = false;
       for (final elif in stmt.elifBranches) {
-        if (isTruthy(evaluate(elif.condition))) {
-          execute(elif.thenBranch); // elif.thenBranch is likely a BlockStmt
+        await _yieldAndCheckStop();
+        if (isTruthy(await evaluate(elif.condition))) {
+          await execute(elif.thenBranch); // elif.thenBranch is likely a BlockStmt
           executedElif = true;
           break; // Execute only the first matching elif
         }
       }
       if (!executedElif && stmt.elseBranch != null) {
-        execute(stmt.elseBranch!); // elseBranch is likely a BlockStmt
+        await execute(stmt.elseBranch!); // elseBranch is likely a BlockStmt
       }
     }
   }
 
   /// Defines a class.
   @override
-  void visitClassStmt(ClassStmt stmt) {
+  Future<void> visitClassStmt(ClassStmt stmt) async {
     PyClass? superclassValue;
     Object? evaluatedSuper; // Temporary variable
 
     if (stmt.superclass != null) {
-      evaluatedSuper = evaluate(stmt.superclass!);
+      evaluatedSuper = await evaluate(stmt.superclass!);
       if (evaluatedSuper is! PyClass) {
         throw RuntimeError(stmt.superclass!.name, "Superclass must be a class.");
       }
@@ -1425,16 +1480,17 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     // 5. Define class in original scope, overwriting temporary null
     _environment.assign(stmt.name, thisClass);
+    await Future.value();
   }
 
   /// Visitor method for executing a [ReturnStmt].
   /// Evaluates the optional return value and throws a [ReturnValue] exception
   /// to unwind the stack to the function call site.
   @override
-  void visitReturnStmt(ReturnStmt stmt) {
+  Future<void> visitReturnStmt(ReturnStmt stmt) async {
     Object? value;
     if (stmt.value != null) {
-      value = evaluate(stmt.value!); // Evaluate the return value expression
+      value = await evaluate(stmt.value!); // Evaluate the return value expression
     }
     // Throw the special ReturnValue exception to unwind the stack to the function call boundary
     throw ReturnValue(value);
@@ -1445,13 +1501,17 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Handles [_BreakException] and [_ContinueException] to control loop flow.
   /// Sets/resets the [_isInLoop] flag. Includes basic infinite loop protection.
   @override
-  void visitWhileStmt(WhileStmt stmt) {
+  Future<void> visitWhileStmt(WhileStmt stmt) async {
      bool previousLoopState = _isInLoop; // remember if while is inside another loop
     _isInLoop = true;
     try {
-      while (isTruthy(evaluate(stmt.condition))) {
+      while (true) {
+        await _yieldAndCheckStop();
+        Object? conditionValue = await evaluate(stmt.condition);
+        if (!isTruthy(conditionValue)) break;
+        await _yieldAndCheckStop();
         try {
-          execute(stmt.body);
+          await execute(stmt.body);
         } on _BreakException {
           break; // leave the dart `while` loop in the interpreter
         } on _ContinueException {
@@ -1471,8 +1531,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// in the current environment and executes the [body].
   /// Handles [_BreakException] and [_ContinueException]. Sets/resets [_isInLoop].
   @override
-  void visitForStmt(ForStmt stmt) {
-    Object? iterableValue = evaluate(stmt.iterable);
+  Future<void> visitForStmt(ForStmt stmt) async {
+    Object? iterableValue = await evaluate(stmt.iterable);
     Token iterableToken = stmt.iterable is VariableExpr?
       (stmt.iterable as VariableExpr).name
       : stmt.variable; // Best guess for token
@@ -1495,32 +1555,33 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _isInLoop = true;
     try {
       for (var element in iterableValue) {
+        await _yieldAndCheckStop();
         try {
           _environment.define(stmt.variable.lexeme, element);
-          execute(stmt.body);
+          await execute(stmt.body);
         } on _BreakException {
-            break;
+          break;
         } on _ContinueException {
-            continue;
+          continue;
         } on ReturnValue {
-        rethrow; // Propagate return upwards
+          rethrow; // Propagate return upwards
         }
       }
     } finally {
-        _isInLoop = previousLoopState; // Vorherigen Zustand wiederherstellen
+      _isInLoop = previousLoopState; // Vorherigen Zustand wiederherstellen
     }
   }
 
   /// Visitor method for executing a [PassStmt]. Does nothing.
   @override
-  void visitPassStmt(PassStmt stmt) {
+  Future<void> visitPassStmt(PassStmt stmt) async {
     // Nothing to do
   }
 
   /// Visitor method for executing a [BreakStmt].
   /// Throws [_BreakException] if inside a loop, otherwise throws [RuntimeError].
   @override
-  void visitBreakStmt(BreakStmt stmt) {
+  Future<void> visitBreakStmt(BreakStmt stmt) async {
     if (!_isInLoop) {
       throw RuntimeError(stmt.token, "SyntaxError: 'break' outside loop");
     }
@@ -1530,7 +1591,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Visitor method for executing a [ContinueStmt].
   /// Throws [_ContinueException] if inside a loop, otherwise throws [RuntimeError].
   @override
-  void visitContinueStmt(ContinueStmt stmt) {
+  Future<void> visitContinueStmt(ContinueStmt stmt) async {
      if (!_isInLoop) {
       throw RuntimeError(stmt.token, "SyntaxError: 'continue' outside loop");
     }
@@ -1541,11 +1602,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Helper to evaluate an expression within a specific [environment].
   /// Used primarily for evaluating default parameter values in the correct closure scope.
-  Object? evaluateInEnvironment(Expr expr, Environment environment) {
+  Future<Object?> evaluateInEnvironment(Expr expr, Environment environment) async {
     Environment previous = _environment;
     try {
       _environment = environment;
-      return evaluate(expr);
+      return await evaluate(expr);
     } finally {
       _environment = previous;
     }
@@ -1553,16 +1614,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Evaluates a single [Expr] node by dispatching to the appropriate `visit` method.
   /// Returns the result of the expression evaluation.
-  Object? evaluate(Expr expr) {
-    return expr.accept(this);
+  Future<Object?> evaluate(Expr expr) async {
+    return await expr.accept(this);
   }
 
   /// Visitor method for evaluating an [AssignExpr].
   /// Evaluates the right-hand side [value], then assigns it to the variable [name]
   /// in the current environment chain using [_environment.assign]. Returns the assigned value.
   @override
-  Object? visitAssignExpr(AssignExpr expr) {
-    Object? value = evaluate(expr.value);
+  Future<Object?> visitAssignExpr(AssignExpr expr) async {
+    Object? value = await evaluate(expr.value);
     // Assign in the current environment (or enclosing ones)
     _environment.assign(expr.name, value);
     return value;
@@ -1573,8 +1634,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
    /// evaluates the right-hand side value, performs the operation,
    /// and assigns the result back to the target. Handles both variable and index targets.
   @override
-  Object? visitAugAssignExpr(AugAssignExpr expr) {
-    Object? rightValue = evaluate(expr.value);
+  Future<Object?> visitAugAssignExpr(AugAssignExpr expr) async {
+    Object? rightValue = await evaluate(expr.value);
     if (expr.target is VariableExpr) {
       VariableExpr targetVar = expr.target as VariableExpr;
       Token name = targetVar.name;
@@ -1584,8 +1645,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       return result;
     } else if (expr.target is IndexGetExpr) {
       IndexGetExpr targetGet = expr.target as IndexGetExpr;
-      Object? object = evaluate(targetGet.object);
-      Object? keyOrIndex = evaluate(targetGet.index);
+      Object? object = await evaluate(targetGet.object);
+      Object? keyOrIndex = await evaluate(targetGet.index);
       Object? currentValue = _performGetOperation(object, keyOrIndex, targetGet.bracket);
       Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
       _performSetOperation(object, keyOrIndex, result, targetGet.bracket);  
@@ -1594,7 +1655,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     // Target: Attribute (e.g., self.count += 1)
     else if (expr.target is AttributeGetExpr) {
       AttributeGetExpr targetGet = expr.target as AttributeGetExpr;
-      Object? object = evaluate(targetGet.object);
+      Object? object = await evaluate(targetGet.object);
       if (object is! PyInstance) {
           throw RuntimeError(targetGet.name, "Augmented assignment target must be an instance for attribute access.");
       }
@@ -1706,8 +1767,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Evaluates the operand, performs the unary operation, and returns the result.
   /// Includes type checking.
   @override
-  Object? visitUnaryExpr(UnaryExpr expr) {
-    Object? operand = evaluate(expr.operand);
+  Future<Object?>  visitUnaryExpr(UnaryExpr expr) async {
+    Object? operand = await evaluate(expr.operand);
     switch (expr.operator.type) {
       case TokenType.NOT:
         return !isTruthy(operand);
@@ -1799,9 +1860,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Visitor method for evaluating a [BinaryExpr] (arithmetic, comparison, bitwise).
   @override
-  Object? visitBinaryExpr(BinaryExpr expr) {
-    Object? left = evaluate(expr.left);
-    Object? right = evaluate(expr.right);
+  Future<Object?> visitBinaryExpr(BinaryExpr expr) async {
+    Object? left = await evaluate(expr.left);
+    Object? right = await evaluate(expr.right);
     return _evaluateBinary(expr.operator, left, right);
   }
 
@@ -1847,8 +1908,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// (positional and keyword), then invokes the callable's `call` method.
   /// Throws [RuntimeError] if the callee is not callable or if errors occur during the call.
   @override
-  Object? visitCallExpr(CallExpr expr) {
-    Object? callee = evaluate(expr.callee); // Evaluate the object being called
+  Future<Object?> visitCallExpr(CallExpr expr) async {
+    Object? callee = await evaluate(expr.callee); // Evaluate the object being called
     if (callee is! PyCallable) {
       throw RuntimeError(expr.paren, "Object of type '${callee?.runtimeType ?? 'None'}' is not callable.");
     }
@@ -1866,7 +1927,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             "Positional argument follows keyword argument in call.",
           ); // Need better token info
         }
-        positionalArgs.add(evaluate(argument.value));
+        positionalArgs.add(await evaluate(argument.value));
       } else if (argument is KeywordArgument) {
         String name = argument.name.lexeme;
         if (keywordArgs.containsKey(name)) {
@@ -1875,23 +1936,21 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             "Duplicate keyword argument '$name' in call.",
           );
         }
-        keywordArgs[name] = evaluate(argument.value);
+        keywordArgs[name] = await evaluate(argument.value);
       }
-      // TODO: Handle argument unpacking (*args, **kwargs) during call if implemented
-      // else if (argument is StarArgument) { ... expand evaluated iterable into positionalArgs ... }
-      // else if (argument is StarStarArgument) { ... expand evaluated map into keywordArgs ... }
     }
 
     // Call the callable object using the collected arguments
     try {
       // The PyCallable's call method is responsible for matching args to params
-      return function.call(this, positionalArgs, keywordArgs);
-    } on ReturnValue catch (_) {
-      // This should not be caught here - ReturnValue propagates up
-      rethrow;
+      // It remains synchronous.
+      return await function.call(this, positionalArgs, keywordArgs);
+    } on ReturnValue catch (returnValue) {
+      // Catch return value *inside* the synchronous part of visitCallExpr
+      return returnValue.value;
+    } on RuntimeError {
+      rethrow; // propagate RuntimeErrors directly
     } catch (e) {
-      // Catch errors thrown by the call itself (e.g., wrong number of args, native errors)
-      if (e is RuntimeError) rethrow; // Re-throw our specific runtime errors
       // Wrap other potential Dart errors
       throw RuntimeError(expr.paren, "Error during function execution: $e");
     }
@@ -1902,10 +1961,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// or dictionary lookup based on the object's type.
   /// Throws [RuntimeError] for invalid types, index out of bounds, or key errors.
   @override
-  Object? visitIndexGetExpr(IndexGetExpr expr) {
+  Future<Object?> visitIndexGetExpr(IndexGetExpr expr) async {
     // Handles obj[index]
-    Object? object = evaluate(expr.object);
-    Object? key = evaluate(expr.index); // The index or key
+    Object? object = await evaluate(expr.object);
+    Object? key = await evaluate(expr.index); // The index or key
 
     // List indexing
     if (object is List) {
@@ -1966,10 +2025,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Evaluates the object, index/key, and value. Performs assignment on lists or dictionaries.
   /// Throws [RuntimeError] for invalid types (e.g., string assignment), index errors, or unhashable keys.
   @override
-  Object? visitIndexSetExpr(IndexSetExpr expr) {
-    Object? targetObject = evaluate(expr.object);
-    Object? indexOrKey = evaluate(expr.index);
-    Object? valueToSet = evaluate(expr.value);
+  Future<Object?> visitIndexSetExpr(IndexSetExpr expr) async {
+    Object? targetObject = await evaluate(expr.object);
+    Object? indexOrKey = await evaluate(expr.index);
+    Object? valueToSet = await evaluate(expr.value);
 
     if (targetObject is List) {
       if (indexOrKey is! int) {
@@ -2009,24 +2068,24 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Visitor method for evaluating a [GroupingExpr] (`(...)`).
   /// Simply evaluates the inner expression.
   @override
-  Object? visitGroupingExpr(GroupingExpr expr) {
-    return evaluate(expr.expression);
+  Future<Object?> visitGroupingExpr(GroupingExpr expr) async {
+    return await evaluate(expr.expression);
   }
 
   /// Visitor method for evaluating a [LiteralExpr] (numbers, strings, True, False, None).
   /// Returns the literal value directly.
   @override
-  Object? visitLiteralExpr(LiteralExpr expr) {
+  Future<Object?> visitLiteralExpr(LiteralExpr expr) async {
     return expr.value;
   }
 
   /// Visitor method for evaluating a [ListLiteralExpr] (`[...]`).
   /// Evaluates each element expression and returns a new Dart [List].
   @override
-  Object? visitListLiteralExpr(ListLiteralExpr expr) {
+  Future<Object?> visitListLiteralExpr(ListLiteralExpr expr) async {
     List<Object?> elements = [];
     for (Expr elementExpr in expr.elements) {
-      elements.add(evaluate(elementExpr));
+      elements.add(await evaluate(elementExpr));
     }
     return elements;
   }
@@ -2035,14 +2094,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Evaluates each key and value expression, checks key hashability, and returns a new Dart [Map].
   /// Throws [RuntimeError] for unhashable keys.
   @override
-  Object? visitDictLiteralExpr(DictLiteralExpr expr) {
+  Future<Object?> visitDictLiteralExpr(DictLiteralExpr expr) async {
     Map<Object?, Object?> map = {};
     if (expr.keys.length != expr.values.length) {
       // Should be caught by parser, but safety check
       throw RuntimeError(expr.brace, "Internal error: Mismatched keys/values in dictionary literal.");
     }
     for (int i = 0; i < expr.keys.length; i++) {
-      Object? key = evaluate(expr.keys[i]);
+      Object? key = await evaluate(expr.keys[i]);
       // TODO: Check if key is hashable (basic types are in Dart)
       // In Python, lists cannot be keys. We might need a custom hash check.
       if (!isHashable(key)) {
@@ -2051,7 +2110,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           "TypeError: unhashable type: '${key?.runtimeType ?? 'None'}'",
         );
       }
-      Object? value = evaluate(expr.values[i]);
+      Object? value = await evaluate(expr.values[i]);
       map[key] = value;
     }
     return map;
@@ -2076,8 +2135,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// - For `or`: evaluates left; if truthy, returns left value, otherwise evaluates and returns right.
   /// - For `and`: evaluates left; if falsey, returns left value, otherwise evaluates and returns right.
   @override
-  Object? visitLogicalExpr(LogicalExpr expr) {
-    Object? left = evaluate(expr.left);
+  Future<Object?> visitLogicalExpr(LogicalExpr expr) async {
+    Object? left = await evaluate(expr.left);
     // Short-circuit evaluation for 'or'
     if (expr.operator.type == TokenType.OR) {
       if (isTruthy(left)) return left;
@@ -2085,20 +2144,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       // Must be AND
       if (!isTruthy(left)) return left;
     }
-    return evaluate(expr.right);
+    return await evaluate(expr.right);
   }
 
   /// Visitor method for evaluating a [VariableExpr].
   /// Looks up the variable's value in the current environment chain using [_environment.get].
   /// Throws [RuntimeError] if the variable is not defined.
   @override
-  Object? visitVariableExpr(VariableExpr expr) {
+  Future<Object?> visitVariableExpr(VariableExpr expr) async {
     return _environment.get(expr.name);
   }
 
   @override
-  Object? visitAttributeGetExpr(AttributeGetExpr expr) {
-    Object? object = evaluate(expr.object); // Evaluate the object part first
+  Future<Object?> visitAttributeGetExpr(AttributeGetExpr expr) async {
+    Object? object = await evaluate(expr.object); // Evaluate the object part first
     String name = expr.name.lexeme;         // The attribute name
 
     PyCallableNativeImpl? impl;
@@ -2139,10 +2198,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
    @override
-  Object? visitAttributeSetExpr(AttributeSetExpr expr) {
-    Object? object = evaluate(expr.object);
+  Future<Object?> visitAttributeSetExpr(AttributeSetExpr expr) async {
+    Object? object = await evaluate(expr.object);
     if (object is PyInstance) {
-      Object? value = evaluate(expr.value);
+      Object? value = await evaluate(expr.value);
       object.set(expr.name, value); // Let instance handle setting
       return value; // Assignment evaluates to the value
     }
@@ -2150,7 +2209,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   @override
-  Object? visitSuperExpr(SuperExpr expr) {
+  Future<Object?> visitSuperExpr(SuperExpr expr) async {
       // 1. Lookup 'super' in current environment.
       //    Since methods get their closure from the class environment, this should find the PyClass object from the super class
       Object? superclassObj = _environment.get(expr.keyword);

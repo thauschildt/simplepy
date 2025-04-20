@@ -10,7 +10,7 @@ abstract class Expr {
   /// Accepts an [ExprVisitor] and calls the appropriate visit method based on
   /// the concrete type of this expression node.
   /// Returns the result produced by the visitor's method.
-   accept<R>(ExprVisitor<R> visitor);
+   Future<R> accept<R>(ExprVisitor<R> visitor);
 }
 
 /// Defines the interface for visiting different types of [Expr] nodes.
@@ -19,39 +19,39 @@ abstract class Expr {
 /// to be performed on the AST without modifying the node classes themselves.
 abstract class ExprVisitor<R> {
   /// Visits an [AssignExpr] node (e.g., `name = value`).
-  R visitAssignExpr(AssignExpr expr);
+  Future<R> visitAssignExpr(AssignExpr expr);
   /// Visits an [AugAssignExpr] node (e.g., `target += value`).
-  R visitAugAssignExpr(AugAssignExpr expr);
+  Future<R> visitAugAssignExpr(AugAssignExpr expr);
   /// Visits a [BinaryExpr] node (e.g., `left + right`).
-  R visitBinaryExpr(BinaryExpr expr);
+  Future<R> visitBinaryExpr(BinaryExpr expr);
   /// Visits a [CallExpr] node (e.g., `func(arg1, kwarg=arg2)`).
-  R visitCallExpr(CallExpr expr);
+  Future<R> visitCallExpr(CallExpr expr);
   /// Visits a [IndexGetExpr] node (e.g., `object[index]`).
-  R visitIndexGetExpr(IndexGetExpr expr);
+  Future<R> visitIndexGetExpr(IndexGetExpr expr);
   /// Visits a [IndexSetExpr] node (e.g., `object[index] = value`).
-  R visitIndexSetExpr(IndexSetExpr expr);
+  Future<R> visitIndexSetExpr(IndexSetExpr expr);
   /// Visits a [AttributeGetExpr] node (e.g., `obj.attr`).
-  R visitAttributeGetExpr(AttributeGetExpr expr);
+  Future<R> visitAttributeGetExpr(AttributeGetExpr expr);
   /// Visits a [AttributeSetExpr] node (e.g., `obj.attr = value`).
-  R visitAttributeSetExpr(AttributeSetExpr expr);
+  Future<R> visitAttributeSetExpr(AttributeSetExpr expr);
   /// Visits a [GroupingExpr] node (e.g., `(expression)`).
-  R visitGroupingExpr(GroupingExpr expr);
+  Future<R> visitGroupingExpr(GroupingExpr expr);
   /// Visits a [LiteralExpr] node (e.g., `123`, `"hello"`, `True`, `None`).
-  R visitLiteralExpr(LiteralExpr expr);
+  Future<R> visitLiteralExpr(LiteralExpr expr);
   /// Visits a [ListLiteralExpr] node (e.g., `[elem1, elem2]`).
-  R visitListLiteralExpr(ListLiteralExpr expr);
+  Future<R> visitListLiteralExpr(ListLiteralExpr expr);
   /// Visits a [DictLiteralExpr] node (e.g., `{key1: val1, key2: val2}`).
-  R visitDictLiteralExpr(DictLiteralExpr expr);
+  Future<R> visitDictLiteralExpr(DictLiteralExpr expr);
   /// Visits a [LogicalExpr] node (e.g., `left and right`, `left or right`).
-  R visitLogicalExpr(LogicalExpr expr);
+  Future<R> visitLogicalExpr(LogicalExpr expr);
   /// Visits a [UnaryExpr] node (e.g., `-operand`, `not operand`).
-  R visitUnaryExpr(UnaryExpr expr);
+  Future<R> visitUnaryExpr(UnaryExpr expr);
   /// Visits a [VariableExpr] node (e.g., `my_variable`).
-  R visitVariableExpr(VariableExpr expr);
+  Future<R> visitVariableExpr(VariableExpr expr);
   /// Visits a [SuperExpr] node (e.g., in `super().__init__()`).
-  R visitSuperExpr(SuperExpr expr);
+  Future<R> visitSuperExpr(SuperExpr expr);
   /// Visits a [LambdaExpr] node (e.g., `lambda x: x**2`).
-  R visitLambdaExpr(LambdaExpr expr);
+  Future<R> visitLambdaExpr(LambdaExpr expr);
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -62,7 +62,7 @@ class AssignExpr extends Expr {
   final Expr value;
   AssignExpr(this.name, this.value);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitAssignExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitAssignExpr(this);
 }
 
 /// Represents an augmented assignment expression (e.g., `target += value`, `target *= value`).
@@ -75,7 +75,7 @@ class AugAssignExpr extends Expr {
   final Expr value;
   AugAssignExpr(this.target, this.operator, this.value);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitAugAssignExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitAugAssignExpr(this);
 }
 
 /// Represents a binary operation (e.g., `left + right`, `left == right`).
@@ -88,7 +88,7 @@ class BinaryExpr extends Expr {
   final Expr right;
   BinaryExpr(this.left, this.operator, this.right);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitBinaryExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitBinaryExpr(this);
 }
 
 /// Base class for different kinds of arguments passed in a function call.
@@ -120,7 +120,7 @@ class CallExpr extends Expr {
   final List<Argument> arguments;
   CallExpr(this.callee, this.paren, this.arguments);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitCallExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitCallExpr(this);
 }
 
 /// Represents an indexing or subscription expression used to get a value (e.g., `object[index]`).
@@ -133,7 +133,7 @@ class IndexGetExpr extends Expr {
   final Expr index;
   IndexGetExpr(this.object, this.bracket, this.index);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexGetExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexGetExpr(this);
 }
 
 /// Represents an item assignment expression using indexing (e.g., `object[index] = value`).
@@ -148,7 +148,7 @@ class IndexSetExpr extends Expr {
   final Token bracket;
   IndexSetExpr(this.object, this.index, this.value, this.bracket);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexSetExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexSetExpr(this);
 }
 
 /// Represents a dot expression to get an attribute from an object (e.g., `object.attribute`).
@@ -157,7 +157,7 @@ class AttributeGetExpr extends Expr {
   final Token name;  // The identifier token for the attribute name
   AttributeGetExpr(this.object, this.name);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeGetExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeGetExpr(this);
 }
 
 /// Represents an item assignment expression using dot notation (e.g., `object.attribute = value`).
@@ -167,7 +167,7 @@ class AttributeSetExpr extends Expr {
   final Expr value;  // The expression for the value to assign
   AttributeSetExpr(this.object, this.name, this.value);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeSetExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeSetExpr(this);
 }
 
 /// Represents the `super()` expression to refer to the superclass
@@ -176,7 +176,7 @@ class SuperExpr extends Expr {
   final Token method;  // The method name identifier after 'super.'
   SuperExpr(this.keyword, this.method);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitSuperExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitSuperExpr(this);
 }
 
 /// Represents a lambda expression (e.g., `lambda x: x**2`)
@@ -186,7 +186,7 @@ class LambdaExpr extends Expr {
   final Expr body; // The single expression body
   LambdaExpr(this.keyword, this.params, this.body);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitLambdaExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitLambdaExpr(this);
 }
 
 /// Represents a unary operation (e.g., `-operand`, `not operand`, `+operand`, `~operand`).
@@ -197,7 +197,7 @@ class UnaryExpr extends Expr {
   final Expr operand;
   UnaryExpr(this.operator, this.operand);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitUnaryExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitUnaryExpr(this);
 }
 
 /// Represents an expression enclosed in parentheses (e.g., `(expression)`).
@@ -207,7 +207,7 @@ class GroupingExpr extends Expr {
   final Expr expression;
   GroupingExpr(this.expression);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitGroupingExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitGroupingExpr(this);
 }
 
 /// Represents a literal value (e.g., number, string, boolean, None).
@@ -216,7 +216,7 @@ class LiteralExpr extends Expr {
   final Object? value;
   LiteralExpr(this.value);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitLiteralExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitLiteralExpr(this);
 }
 
 /// Represents a list literal expression (e.g., `[elem1, elem2, ...]`).
@@ -227,7 +227,7 @@ class ListLiteralExpr extends Expr {
   final List<Expr> elements;
   ListLiteralExpr(this.bracket, this.elements);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitListLiteralExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitListLiteralExpr(this);
 }
 
 /// Represents a dictionary literal expression (e.g., `{key1: value1, key2: value2, ...}`).
@@ -240,7 +240,7 @@ class DictLiteralExpr extends Expr {
   final List<Expr> values;
   DictLiteralExpr(this.brace, this.keys, this.values);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitDictLiteralExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitDictLiteralExpr(this);
 }
 
 /// Represents a logical AND or OR expression, supporting short-circuit evaluation.
@@ -253,7 +253,7 @@ class LogicalExpr extends Expr {
   final Expr right;
   LogicalExpr(this.left, this.operator, this.right);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitLogicalExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitLogicalExpr(this);
 }
 
 /// Represents a variable access expression.
@@ -262,7 +262,7 @@ class VariableExpr extends Expr {
   final Token name;
   VariableExpr(this.name);
   @override
-  R accept<R>(ExprVisitor<R> visitor) => visitor.visitVariableExpr(this);
+  Future<R> accept<R>(ExprVisitor<R> visitor) => visitor.visitVariableExpr(this);
 }
 
 // --- Statements ---
@@ -276,7 +276,7 @@ abstract class Stmt {
   /// Accepts a [StmtVisitor] and calls the appropriate visit method based on
   /// the concrete type of this statement node.
   /// Returns the result produced by the visitor's method (often `void`).
-  R accept<R>(StmtVisitor<R> visitor);
+  Future<R> accept<R>(StmtVisitor<R> visitor);
 }
 
 /// Defines the interface for visiting different types of [Stmt] nodes.
@@ -285,27 +285,27 @@ abstract class Stmt {
 /// to be performed on the AST without modifying the node classes themselves.
 abstract class StmtVisitor<R> {
   /// Visits a [BlockStmt] node (sequence of statements).
-  R visitBlockStmt(BlockStmt stmt);
+  Future<R> visitBlockStmt(BlockStmt stmt);
   /// Visits an [ExpressionStmt] node (an expression used as a statement).
-  R visitExpressionStmt(ExpressionStmt stmt);
+  Future<R> visitExpressionStmt(ExpressionStmt stmt);
   /// Visits a [FunctionStmt] node (`def` statement).
-  R visitFunctionStmt(FunctionStmt stmt);
+  Future<R> visitFunctionStmt(FunctionStmt stmt);
   /// Visits a [ClassStmt] node (`class` statement).
-  R visitClassStmt(ClassStmt stmt); // <<
+  Future<R> visitClassStmt(ClassStmt stmt); // <<
   /// Visits an [IfStmt] node (`if`/`elif`/`else` statement).
-  R visitIfStmt(IfStmt stmt);
+  Future<R> visitIfStmt(IfStmt stmt);
   /// Visits a [ReturnStmt] node (`return` statement).
-  R visitReturnStmt(ReturnStmt stmt);
+  Future<R> visitReturnStmt(ReturnStmt stmt);
   /// Visits a [WhileStmt] node (`while` loop).
-  R visitWhileStmt(WhileStmt stmt);
+  Future<R> visitWhileStmt(WhileStmt stmt);
   /// Visits a [ForStmt] node (`for` loop).
-  R visitForStmt(ForStmt stmt);
+  Future<R> visitForStmt(ForStmt stmt);
   /// Visits a [PassStmt] node (`pass` statement).
-  R visitPassStmt(PassStmt stmt);
+  Future<R> visitPassStmt(PassStmt stmt);
   /// Visits a [BreakStmt] node (`break` statement).
-  R visitBreakStmt(BreakStmt stmt);
+  Future<R> visitBreakStmt(BreakStmt stmt);
   /// Visits a [ContinueStmt] node (`continue` statement).
-  R visitContinueStmt(ContinueStmt stmt);
+  Future<R> visitContinueStmt(ContinueStmt stmt);
 }
 
 /// Represents a block (sequence) of statements.
@@ -315,7 +315,7 @@ class BlockStmt extends Stmt {
   final List<Stmt> statements;
   BlockStmt(this.statements);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitBlockStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitBlockStmt(this);
 }
 
 /// Represents a class
@@ -325,7 +325,7 @@ class ClassStmt extends Stmt {
   final List<FunctionStmt> methods; // Class body contains method definitions
   ClassStmt(this.name, this.superclass, this.methods);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitClassStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitClassStmt(this);
 }
 
 /// Represents a statement that consists solely of an expression.
@@ -335,7 +335,7 @@ class ExpressionStmt extends Stmt {
   final Expr expression;
   ExpressionStmt(this.expression);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitExpressionStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitExpressionStmt(this);
 }
 
 /// Base class for different kinds of parameters in a function definition.
@@ -380,7 +380,7 @@ class FunctionStmt extends Stmt {
   final List<Stmt> body;
   FunctionStmt(this.name, this.params, this.body);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitFunctionStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitFunctionStmt(this);
 }
 
 /// Represents a `pass` statement, which performs no operation.
@@ -389,7 +389,7 @@ class PassStmt extends Stmt {
   final Token token;
   PassStmt(this.token);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitPassStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitPassStmt(this);
 }
 
 /// Represents an `if` statement, potentially including `elif` and `else` clauses.
@@ -405,7 +405,7 @@ class IfStmt extends Stmt {
   final Stmt? elseBranch;
   IfStmt(this.condition, this.thenBranch, this.elifBranches, this.elseBranch);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitIfStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitIfStmt(this);
 }
 
 /// Helper structure representing a single `elif` branch within an [IfStmt].
@@ -426,7 +426,7 @@ class ReturnStmt extends Stmt {
   final Expr? value;
   ReturnStmt(this.keyword, this.value);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitReturnStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitReturnStmt(this);
 }
 
 /// Represents a `while` loop statement (`while condition: body`).
@@ -437,7 +437,7 @@ class WhileStmt extends Stmt {
   final Stmt body;
   WhileStmt(this.condition, this.body);
   @override
-  R accept<R>(StmtVisitor<R> visitor) {
+  Future<R> accept<R>(StmtVisitor<R> visitor) {
     /*print("visit WhileStmt");*/
     return visitor.visitWhileStmt(this);
   }
@@ -453,7 +453,7 @@ class ForStmt extends Stmt {
   final Stmt body;
   ForStmt(this.variable, this.iterable, this.body);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitForStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitForStmt(this);
 }
 
 /// Represents a `break` statement, used to exit the nearest enclosing loop prematurely.
@@ -462,7 +462,7 @@ class BreakStmt extends Stmt {
   final Token token;
   BreakStmt(this.token);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitBreakStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitBreakStmt(this);
 }
 
 /// Represents a `continue` statement, used to skip to the next iteration of the nearest enclosing loop.
@@ -471,120 +471,124 @@ class ContinueStmt extends Stmt {
   final Token token;
   ContinueStmt(this.token);
   @override
-  R accept<R>(StmtVisitor<R> visitor) => visitor.visitContinueStmt(this);
+  Future<R> accept<R>(StmtVisitor<R> visitor) => visitor.visitContinueStmt(this);
 }
 
 /// Utility class implementing the [ExprVisitor] and [StmtVisitor] interfaces
 /// to produce a Lisp-like string representation of the AST for debugging purposes.
 class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
   /// Prints an [Expr] node to its string representation.
-  String printExpr(Expr expr) {
-    return expr.accept(this);
+  Future<String> printExpr(Expr expr) async {
+    return await expr.accept(this);
   }
 
   /// Prints a [Stmt] node to its string representation.
-  String printStmt(Stmt stmt) {
-    return stmt.accept(this);
+  Future<String> printStmt(Stmt stmt) async {
+    return await stmt.accept(this);
   }
 
   @override
-  String visitAssignExpr(AssignExpr expr) =>
-      parenthesize("assign ${expr.name.lexeme}", [expr.value]);
-
   @override
-  String visitAugAssignExpr(AugAssignExpr expr) => parenthesize(
+  Future<String> visitAssignExpr(AssignExpr expr) async {
+    return await parenthesize("assign ${expr.name.lexeme}", [expr.value]);
+  }
+  @override
+  Future<String> visitAugAssignExpr(AugAssignExpr expr) async => await parenthesize(
     "aug_assign ${expr.operator.lexeme}",
     [expr.target, expr.value],
   );
   @override
-  String visitBinaryExpr(BinaryExpr expr) =>
-      parenthesize(expr.operator.lexeme, [expr.left, expr.right]);
+  Future<String> visitBinaryExpr(BinaryExpr expr) async =>
+    await parenthesize(expr.operator.lexeme, [expr.left, expr.right]);
 
   @override
-  String visitCallExpr(CallExpr expr) {
+  Future<String> visitCallExpr(CallExpr expr) async {
     List<String> argStrings = [];
     for (var arg in expr.arguments) {
       if (arg is PositionalArgument) {
-        argStrings.add(printExpr(arg.value));
+        argStrings.add(await printExpr(arg.value));
       } else if (arg is KeywordArgument) {
-        argStrings.add("${arg.name.lexeme}=${printExpr(arg.value)}");
+        argStrings.add("${arg.name.lexeme}=${await printExpr(arg.value)}");
       }
     }
-    return parenthesize("call ${printExpr(expr.callee)}", argStrings);
+    return await parenthesize("call ${await printExpr(expr.callee)}", argStrings);
   }
   @override
-  String visitIndexGetExpr(IndexGetExpr expr) =>
-      parenthesize("get ${printExpr(expr.object)}", [expr.index]);
+  Future<String> visitIndexGetExpr(IndexGetExpr expr) async =>
+    await parenthesize("get ${await printExpr(expr.object)}", [expr.index]);
   @override
-  String visitIndexSetExpr(IndexSetExpr expr) => parenthesize(
-    "set ${printExpr(expr.object)}[${printExpr(expr.index)}]", [expr.value]);
+  Future<String> visitIndexSetExpr(IndexSetExpr expr) async => await parenthesize(
+    "set ${await printExpr(expr.object)}[${await printExpr(expr.index)}]", [expr.value]);
   @override
-  String visitAttributeGetExpr(AttributeGetExpr expr) =>
-      "(get_attr ${printExpr(expr.object)} . ${expr.name.lexeme})";
+  Future<String> visitAttributeGetExpr(AttributeGetExpr expr) async =>
+      "(get_attr ${await printExpr(expr.object)} . ${expr.name.lexeme})";
   @override
-  String visitAttributeSetExpr(AttributeSetExpr expr) => parenthesize(
-    "set_attr ${printExpr(expr.object)} . ${expr.name.lexeme}", [expr.value]);
+  Future<String> visitAttributeSetExpr(AttributeSetExpr expr) async => await parenthesize(
+    "set_attr ${await printExpr(expr.object)} . ${expr.name.lexeme}", [expr.value]);
   @override
-  String visitSuperExpr(SuperExpr expr) => "(super . ${expr.method.lexeme})";
+  Future<String> visitSuperExpr(SuperExpr expr) async => "(super . ${expr.method.lexeme})";
   @override
-  String visitClassStmt(ClassStmt stmt) {
-    var base = stmt.superclass != null ? " < ${printExpr(stmt.superclass!)}" : "";
-    var methodLines = stmt.methods.map((m) => printStmt(m)).join('\n    ');
+  Future<String> visitClassStmt(ClassStmt stmt) async {
+    var base = stmt.superclass != null ? " < ${await printExpr(stmt.superclass!)}" : "";
+    List<Future<String>> methodFutures = stmt.methods.map((m) => printStmt(m)).toList();
+    List<String> methodStrings = await Future.wait(methodFutures);
+    var methodLines = methodStrings.join('\n    ');
     var indentedMethods = methodLines.isNotEmpty ? "    $methodLines" : "";
     return "class ${stmt.name.lexeme}$base:\n$indentedMethods\n";
   }
   @override
-  String visitGroupingExpr(GroupingExpr expr) =>
-      parenthesize("group", [expr.expression]);
+  Future<String> visitGroupingExpr(GroupingExpr expr) async =>
+    await parenthesize("group", [expr.expression]);
   @override
-  String visitLiteralExpr(LiteralExpr expr) => _stringifyLiteral(expr.value);
+  Future<String> visitLiteralExpr(LiteralExpr expr) async => _stringifyLiteral(expr.value);
   @override
-  String visitListLiteralExpr(ListLiteralExpr expr) =>
-      parenthesize("list", expr.elements);
+  Future<String> visitListLiteralExpr(ListLiteralExpr expr) async =>
+    await parenthesize("list", expr.elements);
   @override
-  String visitDictLiteralExpr(DictLiteralExpr expr) {
+  Future<String> visitDictLiteralExpr(DictLiteralExpr expr) async {
     List<String> items = [];
     for (int i = 0; i < expr.keys.length; i++) {
-      items.add("${printExpr(expr.keys[i])}:${printExpr(expr.values[i])}");
+      items.add("${await printExpr(expr.keys[i])}:${await printExpr(expr.values[i])}");
     }
     return "(dict ${items.join(', ')})";
   }
 
   @override
-  String visitLogicalExpr(LogicalExpr expr) =>
-      parenthesize(expr.operator.lexeme, [expr.left, expr.right]);
+  Future<String> visitLogicalExpr(LogicalExpr expr) async =>
+    await parenthesize(expr.operator.lexeme, [expr.left, expr.right]);
   @override
-  String visitVariableExpr(VariableExpr expr) => expr.name.lexeme;
+  Future<String> visitVariableExpr(VariableExpr expr) async => expr.name.lexeme;
 
   @override
-  String visitBlockStmt(BlockStmt stmt) {
-    var lines = stmt.statements.map((s) => printStmt(s)).join('\n  ');
+  Future<String> visitBlockStmt(BlockStmt stmt) async {
+    List<String> stmtStrings = await Future.wait(stmt.statements.map((s) => printStmt(s)).toList());
+    var lines = stmtStrings.join('\n  ');
     // Indent the block content for readability
     return "{\n  $lines\n}";
   }
 
   @override
-  String visitPassStmt(PassStmt stmt) => "(pass)";
+  Future<String> visitPassStmt(PassStmt stmt) async => "(pass)";
 
   @override
-  String visitBreakStmt(BreakStmt stmt) => "(break)";
+  Future<String> visitBreakStmt(BreakStmt stmt) async => "(break)";
 
   @override
-  String visitContinueStmt(ContinueStmt stmt) => "(continue)";
+  Future<String> visitContinueStmt(ContinueStmt stmt) async => "(continue)";
 
   @override
-  String visitExpressionStmt(ExpressionStmt stmt) =>
-      parenthesize("expr_stmt", [stmt.expression]);
+  Future<String> visitExpressionStmt(ExpressionStmt stmt) async =>
+    await parenthesize("expr_stmt", [stmt.expression]);
 
   @override
-  String visitFunctionStmt(FunctionStmt stmt) {
+  Future<String> visitFunctionStmt(FunctionStmt stmt) async {
     List<String> paramStrings = [];
     for (var param in stmt.params) {
       if (param is RequiredParameter) {
         paramStrings.add(param.name.lexeme);
       } else if (param is OptionalParameter) {
         paramStrings.add(
-          "${param.name.lexeme}=${printExpr(param.defaultValue)}",
+          "${param.name.lexeme}=${await printExpr(param.defaultValue)}",
         );
       } else if (param is StarArgsParameter) {
         paramStrings.add("*${param.name.lexeme}");
@@ -592,76 +596,80 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
         paramStrings.add("**${param.name.lexeme}");
       }
     }
+    
     // Indent body statements for readability
-    var body = stmt.body.map((s) => printStmt(s)).join('\n    ');
+    var body = (await Future.wait(stmt.body.map((s) => printStmt(s)).toList())).join('\n    ');
     // Ensure initial indentation for body if not empty
     var indentedBody = body.isNotEmpty ? "    $body" : "";
     return "def ${stmt.name.lexeme}(${paramStrings.join(', ')}):\n$indentedBody\n";
   }
 
   @override
-  String visitLambdaExpr(LambdaExpr expr) {
+  Future<String> visitLambdaExpr(LambdaExpr expr) async {
     List<String> paramStrings = [];
     // Reuse parameter printing logic if possible, or simplify:
     for (var param in expr.params) {
       if (param is RequiredParameter) {
         paramStrings.add(param.name.lexeme);
       } else if (param is OptionalParameter) {
-        paramStrings.add("${param.name.lexeme}=${printExpr(param.defaultValue)}");
+        paramStrings.add("${param.name.lexeme}=${await printExpr(param.defaultValue)}");
       } else if (param is StarArgsParameter) {
         paramStrings.add("*${param.name.lexeme}");
       } else if (param is StarStarKwargsParameter) {
         paramStrings.add("**${param.name.lexeme}");
       }
     }
-    return parenthesize("lambda (${paramStrings.join(', ')})", [expr.body]);
+    return await parenthesize("lambda (${paramStrings.join(', ')})", [expr.body]);
   }
 
   @override
-  String visitIfStmt(IfStmt stmt) {
-    var result =
-        "(if ${printExpr(stmt.condition)}\n  (then ${printStmt(stmt.thenBranch)})";
+  Future<String> visitIfStmt(IfStmt stmt) async {
+    var conditionStr = await printExpr(stmt.condition);
+    var thenBranchStr = await printStmt(stmt.thenBranch); // await nötig
+    var result = "(if $conditionStr\n  (then $thenBranchStr)";
     for (var elif in stmt.elifBranches) {
-      result +=
-          "\n  (elif ${printExpr(elif.condition)}\n    (then ${printStmt(elif.thenBranch)}))";
+      var elifCondStr = await printExpr(elif.condition);
+      var elifThenStr = await printStmt(elif.thenBranch); // await nötig
+      result += "\n  (elif $elifCondStr\n    (then $elifThenStr))";
     }
     if (stmt.elseBranch != null) {
-      result += "\n  (else ${printStmt(stmt.elseBranch!)})";
+      var elseBranchStr = await printStmt(stmt.elseBranch!); // await nötig
+      result += "\n  (else $elseBranchStr)";
     }
-    result += "\n)"; // Close the main 'if' parenthesis
+    result += "\n)";
     return result;
   }
 
   // Removed visitPrintStmt
   @override
-  String visitReturnStmt(ReturnStmt stmt) =>
-      parenthesize("return", stmt.value == null ? [] : [stmt.value!]);
+  Future<String> visitReturnStmt(ReturnStmt stmt) async =>
+    await parenthesize("return", stmt.value == null ? [] : [stmt.value!]);
   @override
-  String visitWhileStmt(WhileStmt stmt) =>
-      parenthesize("while ${printExpr(stmt.condition)}", [stmt.body]);
+  Future<String> visitWhileStmt(WhileStmt stmt) async {
+    return await parenthesize("while ${await printExpr(stmt.condition)}", [stmt.body]);
+  }
   @override
-  String visitForStmt(ForStmt stmt) => parenthesize(
-    "for ${stmt.variable.lexeme} in ${printExpr(stmt.iterable)}",
-    [stmt.body],
-  );
+  Future<String> visitForStmt(ForStmt stmt) async {
+     return await parenthesize("for ${stmt.variable.lexeme} in ${await printExpr(stmt.iterable)}", [stmt.body]);
+  }
 
   @override
-  String visitUnaryExpr(UnaryExpr expr) {
-    return parenthesize(expr.operator.lexeme, [expr.operand]);
+  Future<String> visitUnaryExpr(UnaryExpr expr) async {
+    return await parenthesize(expr.operator.lexeme, [expr.operand]);
   }
 
   /// Helper method to create parenthesized string representations for nodes.
-  String parenthesize(String name, List<dynamic> parts) {
+  Future<String> parenthesize(String name, List<dynamic> parts) async {
     // Use dynamic for mixed Expr/Stmt/String
     var builder = StringBuffer();
     builder.write("($name");
     for (var part in parts) {
       builder.write(" ");
       if (part is Expr) {
-        builder.write(part.accept(this));
+        builder.write(await part.accept(this));
       } else if (part is Stmt) {
         // For statements within expressions (not common, but possible?), indent them
-        String stmtStr = part.accept(this);
+        String stmtStr = await part.accept(this);
         builder.write(
           stmtStr.replaceAll('\n', '\n  '),
         ); // Indent nested statements
