@@ -24,6 +24,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - `list.sort()` not yet implemented
   - `dict.key()`, `dict.values()`, `dict.items()` return list copies, not dynamic views as in Python
   - `str.startswith()`, `str.endswith()`: 1st argument can only be a single string for comparison, no tuple with alternatives
+  - set operators `| & - ^ <= >=`
   - `import`
   - list comprehensions
   - list or string slices
