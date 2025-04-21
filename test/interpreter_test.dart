@@ -472,12 +472,14 @@ print(type(True))
 print(type(None))
 print(type([]))
 print(type({}))
+print(type((1,)))
+print(type({1,'a'}))
 print(type(print))
 print(type(my_func))
 ''');
         expect(result.error, isNull);
         expect(result.output, equals(
-            "<class 'int'>\n<class 'float'>\n<class 'str'>\n<class 'bool'>\n<class 'NoneType'>\n<class 'list'>\n<class 'dict'>\n<class 'builtin_function_or_method'>\n<class 'function'>\n"
+            "<class 'int'>\n<class 'float'>\n<class 'str'>\n<class 'bool'>\n<class 'NoneType'>\n<class 'list'>\n<class 'dict'>\n<class 'tuple'>\n<class 'set'>\n<class 'builtin_function_or_method'>\n<class 'function'>\n"
         ));
     });
      test('type() should raise TypeError for wrong number of arguments', () {
@@ -516,8 +518,8 @@ print(list())
 print(list("abc"))
 l1 = [1, 2]
 l2 = list(l1)
-#l1.append(3) # Modify original
-#print(l1)
+l1.append(3) # Modify original
+print(l1)
 print(l2)      # Should be a copy
 print(list({"a":1, "b":2})) # List of keys
 print(list(range(3)))
@@ -526,7 +528,7 @@ print(list(range(3)))
        // Note: Dict key order might vary in real python, but stable here for now.
        expect(result.output.contains('[]'), isTrue); // Empty list first
        expect(result.output.contains("['a', 'b', 'c']"), isTrue);
-       //expect(result.output.contains('[1, 2, 3]'), isTrue); // Modified l1
+       expect(result.output.contains('[1, 2, 3]'), isTrue); // Modified l1
        expect(result.output.contains('[1, 2]'), isTrue);   // Copied l2
        expect(result.output.contains("['a', 'b']"), isTrue); // Dict keys
        expect(result.output.contains('[0, 1, 2]'), isTrue); // From range
@@ -669,7 +671,8 @@ print(sum([1, 2, 3], 10))
         expect((runCode('sum(1)').error as RuntimeError).message, contains("TypeError: 'int' object is not iterable or not summable"));
         expect((runCode('sum(["a"])').error as RuntimeError).message, contains("TypeError: unsupported operand type(s) for +: 'int' and 'str'"));
         expect((runCode('sum([1], "a")').error as RuntimeError).message, contains("TypeError: unsupported operand type(s) for +: 'str' and 'int'"));
-        //expect((runCode('sum({1:"a"}.values())').error as RuntimeError).message, contains("TypeError: unsupported operand type(s) for +: 'int' and 'str'"));
+        expect(runCode('print({1:"a"}.values())').output, equals("['a']\n"));
+        expect((runCode('sum({1:"a"}.values())').error as RuntimeError).message, contains("TypeError: unsupported operand type(s) for +: 'int' and 'str'"));
      });
      test('sum() should raise TypeError for wrong number of arguments', () {
          expect((runCode('sum()').error as RuntimeError).message, contains('takes at least 1 positional arguments (0 given)'));

@@ -52,6 +52,10 @@ abstract class ExprVisitor<R> {
   R visitSuperExpr(SuperExpr expr);
   /// Visits a [LambdaExpr] node (e.g., `lambda x: x**2`).
   R visitLambdaExpr(LambdaExpr expr);
+  /// Visits a [TupleLiteralExpr] node (e.g., `(1,'a')`).
+  R visitTupleLiteralExpr(TupleLiteralExpr expr);
+  /// Visits a [SetLiteralExpr] node (e.g., `{1,'a'}`).
+  R visitSetLiteralExpr(SetLiteralExpr expr);
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -217,6 +221,30 @@ class LiteralExpr extends Expr {
   LiteralExpr(this.value);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitLiteralExpr(this);
+}
+
+/// Represents a tuple literal expression (e.g., `(1, 'a', True)`).
+class TupleLiteralExpr extends Expr {
+  /// The token for the opening parenthesis `(`. Used for location information.
+  final Token paren;
+  /// The list of expressions representing the elements of the tuple.
+  final List<Expr> elements;
+  TupleLiteralExpr(this.paren, this.elements);
+
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitTupleLiteralExpr(this);
+}
+
+/// Represents a set literal expression (e.g., `{1, 'a', True}`).
+class SetLiteralExpr extends Expr {
+   /// The token for the opening brace `{`. Used for location information.
+  final Token brace;
+  /// The list of expressions representing the elements of the set.
+  final List<Expr> elements;
+  SetLiteralExpr(this.brace, this.elements);
+
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitSetLiteralExpr(this);
 }
 
 /// Represents a list literal expression (e.g., `[elem1, elem2, ...]`).
@@ -650,12 +678,22 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     return parenthesize(expr.operator.lexeme, [expr.operand]);
   }
 
+  @override
+  String visitTupleLiteralExpr(TupleLiteralExpr expr) {
+    return parenthesize("tuple", expr.elements);
+  }
+
+  @override
+  String visitSetLiteralExpr(SetLiteralExpr expr) {
+    return parenthesize("set", expr.elements);
+  }
+
   /// Helper method to create parenthesized string representations for nodes.
   String parenthesize(String name, List<dynamic> parts) {
     // Use dynamic for mixed Expr/Stmt/String
     var builder = StringBuffer();
     builder.write("($name");
-    for (var part in parts) {
+    for (var part in parts)   {
       builder.write(" ");
       if (part is Expr) {
         builder.write(part.accept(this));

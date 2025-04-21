@@ -55,6 +55,36 @@ abstract class PyCallable {
   );
 }
 
+class PyList { // Wrapper for Python-Lists
+  final List<Object?> list;
+  PyList(this.list);
+  @override
+  String toString() => "PyList(${list.toString()})"; // For debugging
+  int get length => list.length;
+}
+
+class PyTuple { // Wrapper for Python-Tuples
+  final List<Object?> tuple; // Internally a list
+  PyTuple(this.tuple);
+  @override
+  int get hashCode => Interpreter._computeTupleHash(tuple); // Stellt Hashbarkeit sicher
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is PyTuple) {
+      if (tuple.length != other.tuple.length) return false;
+      for (int i = 0; i < tuple.length; i++) {
+        if (!Interpreter.internalIsEqual(tuple[i], other.tuple[i])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  String toString() => "PyTuple(${tuple.toString()})"; // For debugging
+}
+
 /// Signatue of native methods
 typedef PyCallableNativeImpl = Object? Function(
   Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs
@@ -572,6 +602,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     //_registerBuiltin("input", NativeFunction(_inputBuiltin));
     _registerBuiltin("list", NativeFunction(_listBuiltin));
     _registerBuiltin("dict", NativeFunction(_dictBuiltin));
+    _registerBuiltin("set", NativeFunction(_setBuiltin));
+    _registerBuiltin("tuple", NativeFunction(_tupleBuiltin));
     _registerBuiltin("round", NativeFunction(_roundBuiltin));
     _registerBuiltin("min", NativeFunction(_minBuiltin));
     _registerBuiltin("max", NativeFunction(_maxBuiltin));
@@ -598,14 +630,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Helper to get a predictable type name string used by type() and error messages.
-  String getTypeString(Object? obj) {
+  static String getTypeString(Object? obj) {
      if (obj == null) return 'NoneType';
      if (obj is bool) return 'bool';
      if (obj is int) return 'int';
      if (obj is double) return 'float';
      if (obj is String) return 'str';
-     if (obj is List) return 'list';
+     if (obj is PyList) return 'list';
      if (obj is Map) return 'dict';
+     if (obj is PyTuple) return 'tuple';
+     if (obj is Set) return 'set';
      if (obj is PyFunction) return 'function';
      if (obj is NativeFunction) return 'builtin_function_or_method';
      if (obj is PyInstance) return obj.klass.name;
@@ -712,7 +746,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         result.add(i);
       }
     }
-    return result; // Return a list of integers
+    return PyList(result); // Return a list of integers
   }
 
   /// Implementation of `len(s)`
@@ -724,11 +758,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     native_methods.checkNumArgs('len', positionalArgs, keywordArgs, required: 1);
     final arg = positionalArgs[0];
     if (arg is String) return arg.length;
-    if (arg is List) return arg.length;
+    if (arg is PyList) return arg.list.length;
+    if (arg is PyTuple) return arg.tuple.length;
     if (arg is Map) return arg.length;
+    if (arg is Set) return arg.length;
 
     throw RuntimeError(builtInToken('len'),
-      "TypeError: object of type '${interpreter.getTypeString(arg)}' has no len()",
+      "TypeError: object of type '${Interpreter.getTypeString(arg)}' has no len()",
     );
   }
 
@@ -797,7 +833,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       return parsedInt;
     }
 
-    throw RuntimeError(builtInToken('int'), "TypeError: int() argument must be a string, a bytes-like object or a number, not '${interpreter.getTypeString(value)}'");
+    throw RuntimeError(builtInToken('int'), "TypeError: int() argument must be a string, a bytes-like object or a number, not '${Interpreter.getTypeString(value)}'");
   }
 
   /// Implementation of `float(x=0.0)`
@@ -822,7 +858,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (parsedFloat != null) return parsedFloat;
       else throw RuntimeError(builtInToken('float'), "ValueError: could not convert string to float: '$value'");
     }
-    throw RuntimeError(builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${interpreter.getTypeString(value)}'");
+    throw RuntimeError(builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${Interpreter.getTypeString(value)}'");
   }
 
   /// Implementation of `bool(x=False)`
@@ -842,7 +878,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNumArgs('type', positionalArgs, keywordArgs, required: 1);
-    return "<class '${interpreter.getTypeString(positionalArgs[0])}'>";
+    return "<class '${Interpreter.getTypeString(positionalArgs[0])}'>";
   }
 
   /// Implementation of `abs(x)`
@@ -856,7 +892,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (arg is int) return arg.abs();
     if (arg is double) return arg.abs();
     if (arg is bool) return arg ? 1 : 0; // abs(True)==1, abs(False)==0
-    throw RuntimeError(builtInToken('abs'), "TypeError: bad operand type for abs(): '${interpreter.getTypeString(arg)}'");
+    throw RuntimeError(builtInToken('abs'), "TypeError: bad operand type for abs(): '${Interpreter.getTypeString(arg)}'");
   }
 
   /// Implementation of `input([prompt])`
@@ -884,19 +920,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNumArgs('list', positionalArgs, keywordArgs, maxOptional: 1);
-    if (positionalArgs.isEmpty) return <Object?>[]; // New empty list
+    if (positionalArgs.isEmpty) return PyList(<Object?>[]); // New empty list
 
     final iterable = positionalArgs[0];
-    if (iterable is List) return List.from(iterable); // Return a shallow copy
-    if (iterable is String) return iterable.split(''); // List of characters
-    if (iterable is Map) return iterable.keys.toList(); // List of keys
+    if (iterable is PyList) return PyList(List.from(iterable.list)); // Return a shallow copy
+    if (iterable is String) return PyList(iterable.split('')); // List of characters
+    if (iterable is Map) return PyList(iterable.keys.toList()); // List of keys
 
     // Check if it's an iterable result from range() which is already a List
     // No, range() directly returns List<int> in this impl.
 
     // TODO: Handle other potential iterable types if added (e.g., custom iterators)
 
-    throw RuntimeError(builtInToken('list'), "TypeError: '${interpreter.getTypeString(iterable)}' object is not iterable");
+    throw RuntimeError(builtInToken('list'), "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable");
   }
 
   /// Implementation of `dict(**kwarg)` / `dict(mapping)` / `dict(iterable)`
@@ -916,20 +952,23 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       final arg = positionalArgs[0];
       if (arg is Map) {
         result.addAll(arg);
-      } else if (arg is List) {
-        for (var item in arg) {
-          if ((item is List || item is String) && item.length == 2) {
-            final key = item[0];
-            final value = item[1];
-            if (!interpreter.isHashable(key)) {
-              throw RuntimeError(builtInToken('dict'), "TypeError: unhashable type: '${interpreter.getTypeString(key)}'");
+      } else if (arg is PyList) {
+        for (var item in arg.list) {
+          List? pair;
+          if (item is String) pair = item as List;
+          if (item is PyList) pair = item.list;
+          if ((pair is List || pair is String) && pair!.length == 2) {
+            final key = pair[0];
+            final value = pair[1];
+            if (!Interpreter.isHashable(key)) {
+              throw RuntimeError(builtInToken('dict'), "TypeError: unhashable type: '${Interpreter.getTypeString(key)}'");
             }
             result[key] = value;
-          } else if (item is List || item is String) {
+          } else if (item is PyList || item is String) {
             throw RuntimeError(builtInToken('dict'),
-              "ValueError: dictionary update sequence element #${arg.indexOf(item)} has length ${item.length}; 2 is required");
+              "ValueError: dictionary update sequence element #${arg.list.indexOf(item)} has length ${pair!.length}; 2 is required");
           } else {
-            throw RuntimeError(builtInToken('dict'), "ValueError: cannot convert dictionary update sequence element #${arg.indexOf(item)} to a sequence");
+            throw RuntimeError(builtInToken('dict'), "ValueError: cannot convert dictionary update sequence element #${arg.list.indexOf(item)} to a sequence");
           }
         }
       } else {
@@ -945,6 +984,53 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     return result;
     
   }
+
+  static Object? _setBuiltin(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    _checkNumArgs('set', positionalArgs, keywordArgs, required: 0, maxOptional: 1);
+    _checkNoKeywords('set', keywordArgs);
+    Set<Object?> resultSet = {};
+    if (positionalArgs.isEmpty) {
+      return resultSet; // Empty set: set()
+    }
+    Object? iterable = positionalArgs[0];
+    if (iterable is String) {
+      iterable = iterable.split(''); // Convert String to iterable of chars
+    } else if (iterable is PyList) {
+      iterable = iterable.list;
+    } else if (iterable is PyTuple) {
+      iterable = iterable.tuple;
+    } else if (iterable is Map) {
+      iterable = iterable.keys; // Convert Map to iterable of keys for set()
+    }
+    if (iterable is Iterable) { // Handles List, Set, String chars, Map keys
+      for (var element in iterable) {
+        if (!Interpreter.isHashable(element)) {
+            throw RuntimeError(builtInToken('set'), "TypeError: unhashable type: '${Interpreter.getTypeString(element)}'");
+        }
+        resultSet.add(element);
+      }
+      return resultSet;
+    }
+    throw RuntimeError(builtInToken('set'), "TypeError: argument of type '${Interpreter.getTypeString(iterable)}' is not iterable");
+  }
+
+ static Object? _tupleBuiltin(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  _checkNumArgs('tuple', positionalArgs, keywordArgs, required: 0, maxOptional: 1);
+  _checkNoKeywords('tuple', keywordArgs);
+  if (positionalArgs.isEmpty) {
+    return <Object?>[]; // Empty tuple: tuple() -> represented as empty list
+  }
+  Object? iterable = positionalArgs[0];
+  if (iterable is Iterable) { // Handles List, Set, String chars, Map keys
+    if (iterable is Map) {
+      iterable = (iterable as Map).keys; // Convert Map to iterable of keys for tuple()
+    } else if (iterable is String) {
+      iterable = (iterable as String).split(''); // Convert String to iterable of chars
+    }
+    return iterable.toList();
+  }
+  throw RuntimeError(builtInToken('tuple'), "TypeError: argument of type '${Interpreter.getTypeString(iterable)}' is not iterable");
+}
 
   /// Implementation of `round(number[, ndigits])`
   /// Implements Python 3's "round half to even" behavior.
@@ -969,7 +1055,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
              ndigits = ndigitsArg ? 1: 0;
         }
          else {
-            throw RuntimeError(builtInToken('round'), "TypeError: 'ndigits' argument must be an integer, not '${interpreter.getTypeString(ndigitsArg)}'");
+            throw RuntimeError(builtInToken('round'), "TypeError: 'ndigits' argument must be an integer, not '${Interpreter.getTypeString(ndigitsArg)}'");
         }
     }
 
@@ -979,7 +1065,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     } else if (numberArg is bool) {
         number = numberArg ? 1 : 0;
     } else {
-        throw RuntimeError(builtInToken('round'), "TypeError: type ${interpreter.getTypeString(numberArg)} not supported");
+        throw RuntimeError(builtInToken('round'), "TypeError: type ${Interpreter.getTypeString(numberArg)} not supported");
     }
     // --- Perform Rounding ---
     num factor = pow(10, ndigits);
@@ -1040,10 +1126,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (positionalArgs.length == 1) {
       // Single argument version: min(iterable)
       final arg = positionalArgs[0];
-      if (arg is List) valuesToCompare = arg;
+      if (arg is PyList) valuesToCompare = arg.list;
       else if (arg is String) valuesToCompare = arg.split('');
       else if (arg is Map) valuesToCompare = arg.keys;
-      else throw RuntimeError(builtInToken('min'), "TypeError: '${interpreter.getTypeString(arg)}' object is not iterable");
+      else throw RuntimeError(builtInToken('min'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
     } else {
       // Multiple argument version: min(arg1, arg2, ...)
       valuesToCompare = positionalArgs;
@@ -1078,10 +1164,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
       final arg = positionalArgs[0];
-      if (arg is List) valuesToCompare = arg;
+      if (arg is PyList) valuesToCompare = arg.list;
       else if (arg is String) valuesToCompare = arg.split('');
       else if (arg is Map) valuesToCompare = arg.keys;
-      else throw RuntimeError(builtInToken('max'), "TypeError: '${interpreter.getTypeString(arg)}' object is not iterable");
+      else throw RuntimeError(builtInToken('max'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
     } else {
       valuesToCompare = positionalArgs;
     }
@@ -1116,11 +1202,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? start = (positionalArgs.length > 1) ? positionalArgs[1] : 0; // Default start is 0
 
     Iterable<Object?>? valuesToSum;
-    if (iterable is List) valuesToSum = iterable;
+    if (iterable is PyList) valuesToSum = iterable.list;
+    else if (iterable is PyTuple) valuesToSum = iterable.tuple;
     else if (iterable is Map) valuesToSum = iterable.values; // Sum values, not keys
     // Cannot sum strings in Python
-    else throw RuntimeError(builtInToken('sum'), "TypeError: '${interpreter.getTypeString(iterable)}' object is not iterable or not summable");
-
+    else throw RuntimeError(builtInToken('sum'), "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable or not summable");
     if (valuesToSum.isEmpty && start == 0) return 0; // Mimic python sum([]) == 0
 
     Object? currentSum = start;
@@ -1134,7 +1220,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
            // Improve error message for sum() specifically
            if (e.message.contains("unsupported operand type(s) for +")) {
                throw RuntimeError(builtInToken('sum'),
-                 "TypeError: unsupported operand type(s) for +: '${interpreter.getTypeString(currentSum)}' and '${interpreter.getTypeString(value)}' in sum()"
+                 "TypeError: unsupported operand type(s) for +: '${Interpreter.getTypeString(currentSum)}' and '${Interpreter.getTypeString(value)}' in sum()"
                );
            }
            rethrow; // Re-throw other RuntimeErrors
@@ -1172,11 +1258,26 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           }
           return "'$escaped'";
       }
-      if (object is List) return '[${object.map(repr).join(', ')}]';
+      if (object is PyList) return '[${object.list.map(repr).join(', ')}]';
+      if (object is PyTuple) {
+        String content = object.tuple.map(repr).join(', ');
+        if (object.tuple.length == 1) content += ',';
+        return '($content)';
+      }
+      if (object is Set) {
+        if (object.isEmpty) return "set()";
+        return '{${object.map(repr).join(', ')}}';
+      }
       if (object is Map) return '{${object.entries.map((e) => '${repr(e.key)}: ${repr(e.value)}').join(', ')}}';
 
-      // Fallback for other types (numbers, functions) - could refine number formatting
-      return stringify(object);
+      if (object is PyCallable) return object.toString(); // <fn ...>, <native fn>, <method...>
+      if (object is PyClass) return "<class '${object.name}'>";
+      if (object is PyInstance) {
+        // TODO: call __repr__ when implemented
+        return object.toString(); // <MyClass object>
+      }
+      // Fallback für numbers and basic types
+      return object.toString();
   }
 
   /// Creates a dummy token for error reporting within built-ins.
@@ -1477,6 +1578,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       (stmt.iterable as VariableExpr).name
       : stmt.variable; // Best guess for token
 
+    if (iterableValue is PyList) iterableValue = iterableValue.list;
+
     if (iterableValue is! Iterable) {
       // Check if it's a Dart Iterable (List, Set, etc.)
       // Check if it's a String (also iterable)
@@ -1626,7 +1729,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     switch (operator.type) {
       case TokenType.STAR_EQUAL:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is List) && right is int) return _multiplySequence(left!, right, operator);
+        if ((left is String || left is PyList) && right is int) return _multiplySequence(left!, right, operator);
         if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, operator);
         throw RuntimeError(operator, "Unsupported operand type(s) for *=: '${left?.runtimeType}' and '${right?.runtimeType}'");
       case TokenType.STAR_STAR_EQUAL:
@@ -1666,12 +1769,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Helper for augmented assignment: performs the 'get' part for index/key targets.
   Object? _performGetOperation(Object? object, Object? keyOrIndex, Token bracket) {
-    if (object is List) {
+    if (object is PyList) {
       if (keyOrIndex is! int) throw RuntimeError(bracket, "List indices must be integers.");
       int index = keyOrIndex;
-      if (index < 0) index += object.length;
-      if (index < 0 || index >= object.length) throw RuntimeError(bracket, "List index out of range.");
-      return object[index];
+      List l=object.list;
+      if (index < 0) index += l.length;
+      if (index < 0 || index >= l.length) throw RuntimeError(bracket, "List index out of range.");
+      return l[index];
     }
     if (object is Map) {
       if (!object.containsKey(keyOrIndex)) throw RuntimeError(bracket, "KeyError: ${stringify(keyOrIndex)}");
@@ -1682,12 +1786,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Helper for augmented assignment: performs the 'set' part for index/key targets.
   void _performSetOperation(Object? object, Object? keyOrIndex, Object? value, Token bracket) {
-    if (object is List) {
+    if (object is PyList) {
       if (keyOrIndex is! int) throw RuntimeError(bracket, "List indices must be integers.");
       int index = keyOrIndex;
-      if (index < 0) index += object.length;
-      if (index < 0 || index >= object.length) throw RuntimeError(bracket, "List index out of range.");
-      object[index] = value;
+      List l=object.list;
+      if (index < 0) index += l.length;
+      if (index < 0 || index >= l.length) throw RuntimeError(bracket, "List index out of range.");
+      l[index] = value;
       return;
     }
     if (object is Map) {
@@ -1750,7 +1855,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.PLUS:
         if (left is num && right is num) return left + right;
         if (left is String && right is String) return left + right;
-        if (left is List && right is List) return [...left, ...right];
+        if (left is PyList && right is PyList) return PyList([...left.list, ...right.list]);
+         if (left is PyTuple && right is PyTuple) return PyTuple([...left.tuple, ...right.tuple]);
         throw RuntimeError(operator, "TypeError: unsupported operand type(s) for +: '${getTypeString(left)}' and '${getTypeString(right)}'");
       case TokenType.SLASH:
         checkNumbers();
@@ -1765,7 +1871,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         } return (left as num) ~/ (right as num);
       case TokenType.STAR:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is List) && right is int) return _multiplySequence(left!, right, operator);
+        if ((left is String || left is PyList) && right is int) return _multiplySequence(left!, right, operator);
         if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, operator);
         throw RuntimeError(operator, "TypeError: unsupported operand type(s) for *: '${getTypeString(left)}' and '${getTypeString(right)}'");
       case TokenType.STAR_STAR:
@@ -1789,6 +1895,32 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.LEFT_SHIFT: checkInts(); return (left as int) << (right as int);
       case TokenType.RIGHT_SHIFT: checkInts(); return (left as int) >> (right as int);
 
+      case TokenType.IN:
+        if (right is PyList || right is PyTuple || (right is String && left is String)) { // Works for Lists (Tuples) and Strings
+          // Simple linear search for 'in' on List/String
+          // Note: String check is more efficient with contains
+          if (right is String) return right.contains(stringify(left)); // Convert left to string for check
+          List l=right is PyList? right.list : right is PyTuple? right.tuple : [];
+          // For List (Tuple) use isEqual for comparison
+          for (var element in l) {
+            if (isEqual(left, element)) return true;
+          }
+          return false;
+        } else if (right is Map) {
+          // Check if key exists (requires left to be hashable)
+          if (!isHashable(left)) {
+            throw RuntimeError(operator, "TypeError: unhashable type: '${getTypeString(left)}' for 'in' operator with dictionary");
+          }
+          return right.containsKey(left);
+        } else if (right is Set) {
+          // Check if element exists (requires left to be hashable)
+          if (!isHashable(left)) {
+            // Similar to dicts, unhashable keys won't be found
+            throw RuntimeError(operator, "TypeError: unhashable type: '${getTypeString(left)}' for 'in' operator with set");
+          }
+          return right.contains(left); // Set.contains uses hash/equality
+        }
+        throw RuntimeError(operator, "TypeError: argument of type '${getTypeString(right)}' is not iterable for 'in' operator");
       default: throw RuntimeError(operator, "Internal error: Unknown binary operator type ${operator.type}");
     }
   }
@@ -1815,7 +1947,6 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Helper for Python's specific modulo behavior (result has same sign as divisor).
   num _pythonModulo(num a, num b) {
-    print("$a % $b ${a.runtimeType} ${b.runtimeType}");
     if (b == 0) {
       throw RuntimeError(Token(TokenType.PERCENT, '%', null, 0,0),
         a is int && b is int? "ZeroDivisionError: integer modulo by zero" : "ZeroDivisionError: float modulo");
@@ -1825,18 +1956,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     return result;
   }
 
-  /// Helper for sequence multiplication (string * int, list * int).
+  /// Helper for sequence multiplication (string * int, list * int, tuple * int).
   Object _multiplySequence(Object sequence, int times, Token operator) {
     if (times < 0) times = 0; // Multiply by negative is empty sequence
 
     if (sequence is String) {
       return sequence * times; // Dart string multiplication works
-    } else if (sequence is List) {
+    } else if (sequence is PyList) {
       List result = [];
       for (int i = 0; i < times; i++) {
-        result.addAll(sequence); // Add copies of elements
+        result.addAll(sequence.list); // Add copies of elements
       }
-      return result;
+      return PyList(result);
     }
     // Should not be reached if called correctly
     throw RuntimeError(operator, "Internal error in sequence multiplication.");
@@ -1908,7 +2039,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? key = evaluate(expr.index); // The index or key
 
     // List indexing
-    if (object is List) {
+    if (object is PyList) {
       if (key is! int) {
         // Python allows slices, e.g. mylist[1:3]. Not implemented here.
         // if (key is Slice) { ... }
@@ -1918,13 +2049,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         );
       }
       int index = key;
+      List l=object.list;
       // Handle negative indices
-      if (index < 0) index += object.length;
+      if (index < 0) index += l.length;
 
-      if (index < 0 || index >= object.length) {
+      if (index < 0 || index >= l.length) {
         throw RuntimeError(expr.bracket, "List index out of range.");
       }
-      return object[index];
+      return l[index];
     }
 
     // String indexing/slicing
@@ -1971,18 +2103,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? indexOrKey = evaluate(expr.index);
     Object? valueToSet = evaluate(expr.value);
 
-    if (targetObject is List) {
+    if (targetObject is PyList) {
       if (indexOrKey is! int) {
         throw RuntimeError(expr.bracket, "List indices must be integers.");
       }
       int index = indexOrKey;
+      List target = targetObject.list;
       if (index < 0) {
-        index += targetObject.length;
+        index += target.length;
       }
-      if (index < 0 || index >= targetObject.length) {
+      if (index < 0 || index >= target.length) {
         throw RuntimeError(expr.bracket, "List assignment index out of range.");
       }
-      targetObject[index] = valueToSet;
+      target[index] = valueToSet;
       return valueToSet;
     } else if (targetObject is Map) {
       if (!isHashable(indexOrKey)) {
@@ -2024,11 +2157,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Evaluates each element expression and returns a new Dart [List].
   @override
   Object? visitListLiteralExpr(ListLiteralExpr expr) {
-    List<Object?> elements = [];
-    for (Expr elementExpr in expr.elements) {
-      elements.add(evaluate(elementExpr));
-    }
-    return elements;
+    List<Object?> elements = expr.elements.map((e) => evaluate(e)).toList();
+    return PyList(elements);
   }
 
   /// Visitor method for evaluating a [DictLiteralExpr] (`{...}`).
@@ -2057,15 +2187,46 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     return map;
   }
 
+  @override
+  Object? visitTupleLiteralExpr(TupleLiteralExpr expr) {
+    List<Object?> elements = expr.elements.map((e) => evaluate(e)).toList();
+    return PyTuple(elements);
+  }
+
+  @override
+  Object? visitSetLiteralExpr(SetLiteralExpr expr) {
+    Set<Object?> elements = {};
+    for (Expr elemExpr in expr.elements) {
+      Object? element = evaluate(elemExpr);
+      if (!isHashable(element)) {
+        throw RuntimeError(expr.brace, "TypeError: unhashable type: '${getTypeString(element)}'");
+      }
+      // --- Python bool/int equivalence check ---
+      bool skipAdd = false;
+      if (element == true) {
+          if (elements.contains(1)) skipAdd = true;
+      } else if (element == 1) {
+          if (elements.contains(true)) skipAdd = true;
+      } else if (element == false) {
+          if (elements.contains(0)) skipAdd = true;
+      } else if (element == 0) {
+          if (elements.contains(false)) skipAdd = true;
+      }
+      if (!skipAdd) {
+        elements.add(element); // Add to the temporary Dart set
+      }
+    }
+    return elements;
+  }
+
   /// Helper to check if an object is suitable as a dictionary key (hashable).
   /// Mimics Python's rules (numbers, strings, booleans, None are hashable; lists, dicts are not).
-  bool isHashable(Object? key) {
+  static bool isHashable(Object? key) {
     if (key == null) return true; // None is hashable
-    if (key is num || key is String || key is bool || key is PyCallable)
+    if (key is num || key is String || key is bool || key is PyCallable || key is PyTuple) {
       return true;
-    // Add other immutable types like Tuple if implemented
-    // Lists and Dicts are not hashable by default in Python
-    if (key is List || key is Map) return false;
+    }
+    if (key is Set || key is PyTuple || key is Map) return false;
     // Assume other unknown types are hashable? Or be stricter? Let's be strict.
     // Could potentially check for a custom __hash__ method if classes are added.
     return false; // Default to not hashable
@@ -2103,11 +2264,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     PyCallableNativeImpl? impl;
 
-    // Check for methods on built-in types
-    if (object is List) {
+    if (object is PyTuple) {
+      impl = native_methods.tupleMethodImpls[name];
+      if (impl != null) {
+        return PyBoundNativeMethod(object, impl, name);
+      }
+    } else if (object is PyList) {
       impl = native_methods.listMethodImpls[name];
       if (impl != null) {
-        return PyBoundNativeMethod(object, impl, name); // Return the bound method callable
+        return PyBoundNativeMethod(object, impl, name);
+      }
+    } else if (object is Set) {
+      impl = native_methods.setMethodImpls[name];
+      if (impl != null) {
+        return PyBoundNativeMethod(object, impl, name);
       }
     } else if (object is Map) {
       impl = native_methods.dictMethodImpls[name];
@@ -2186,44 +2356,149 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (object is bool) return object; // Booleans are themselves
     if (object is num) return object != 0; // Zero is falsey, others are truthy
     if (object is String) return object.isNotEmpty; // Empty string is falsey
-    if (object is List) return object.isNotEmpty; // Empty list is falsey
+    if (object is PyList) return object.list.isNotEmpty; // Empty list is falsey
     if (object is Map) return object.isNotEmpty; // Empty map is falsey
     // Other objects (like functions, class instances) are generally truthy
     return true;
+  }
+
+  /// Performs deep equality comparison between two runtime objects.
+  /// Handles primitives, None, and recursively compares containers.
+  /// Designed to be called internally or from type overrides (like PyTuple.==).
+  /// Does NOT handle cross-type numeric comparison (e.g., 1 == 1.0) directly,
+  /// relies on Dart's == for primitives which does handle it.
+  static bool internalIsEqual(Object? a, Object? b) {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    if (identical(a, b)) return true;
+    // Check runtime types for container/custom types BEFORE primitive checks
+    // to ensure we use the deep comparison logic for them.
+
+    // --- Container Types (Recursive Comparison) ---
+    if (a is PyList && b is PyList) {
+      if (a.list.length != b.list.length) return false;
+      for (int i = 0; i < a.list.length; i++) {
+        // Recursive call for elements
+        if (!internalIsEqual(a.list[i], b.list[i])) return false;
+      }
+      return true;
+    }
+    if (a is PyTuple && b is PyTuple) {
+      if (a.tuple.length != b.tuple.length) return false;
+      for (int i = 0; i < a.tuple.length; i++) {
+        // Recursive call for elements
+        if (!internalIsEqual(a.tuple[i], b.tuple[i])) return false;
+      }
+      return true;
+    }
+    if (a is Set && b is Set) {
+      if (a.length != b.length) return false;
+      // Relies on elements having correct hashCode and == (esp. PyTuple)
+      // This check assumes elements within the sets are comparable using their ==
+      try {
+        // Check if every element in 'a' is contained in 'b'.
+        // containsAll might be slightly less efficient than iterating and checking contains
+        // return a.containsAll(b);
+        // Alternative: Iterate and check containment
+        for (final elementA in a) {
+          // Need to iterate 'b' because contains() relies on hashCode/== which might
+          // not directly map to internalIsEqual if not overridden correctly everywhere.
+          // However, if PyTuple overrides == correctly, contains should work.
+          // Let's trust Set.contains for now, assuming correct overrides.
+          if (!b.contains(elementA)) return false;
+        }
+        return true;
+      } catch (e) {
+        // Catch potential errors during comparison within Set logic
+        throw RuntimeError(builtInToken("set =="), "Error during Set comparison: $e");
+      }
+    }
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      try {
+        for (final keyA in a.keys) {
+          // Check key existence (relies on key hashCode/==, e.g. PyTuple's overrides)
+          bool keyFoundInB = false;
+          Object? valueBForKeyA;
+          // We must iterate b's keys to use internalIsEqual for key comparison,
+          // as b.containsKey(keyA) uses default hashCode/==.
+          for (final keyB in b.keys) {
+            if (internalIsEqual(keyA, keyB)) {
+              keyFoundInB = true;
+              valueBForKeyA = b[keyB];
+              break;
+            }
+          }
+          if (!keyFoundInB) return false; // Key from 'a' not found in 'b' using deep equality
+          // Recursively compare values using deep equality
+          if (!internalIsEqual(a[keyA], valueBForKeyA)) return false;
+        }
+        return true; // All keys and values matched
+      } catch(e) {
+        throw RuntimeError(builtInToken("dict =="), "Error during dict comparison: $e");
+      }
+    }
+    // --- Primitive Types & Fallback ---
+    // For primitives (num, bool, String), Dart's == works as expected,
+    // including comparing int and double (e.g., 1 == 1.0).
+    // We place this check *after* container checks to ensure deep comparison
+    // for containers isn't skipped.
+    if ((a is num && b is num) ||
+        (a is bool && b is bool) ||
+        (a is String && b is String)) {
+       return a == b;
+    }
+    // --- Other Types (Callables, Classes, Instances) ---
+    // Default Python behavior is identity comparison unless __eq__ is implemented.
+    if (a is PyCallable && b is PyCallable) return identical(a, b);
+    if (a is PyClass && b is PyClass) return identical(a, b);
+    if (a is PyInstance && b is PyInstance) {
+       // TODO: Later, check for and call __eq__ method if present
+       return identical(a, b);
+    }
+    // --- Incompatible Types or Unhandled Cases ---
+    // If types are different (and not handled above, e.g., PyList vs PyTuple),
+    // they are considered not equal.
+    return false;
   }
 
   /// Compares two objects for equality using Python's `==` semantics.
   /// Handles `None`. Performs deep comparison for lists and maps.
   /// Falls back to Dart's `==` for other types.
   bool isEqual(Object? a, Object? b) {
-    if (a == null && b == null) return true; // None == None
-    if (a == null || b == null) return false; // None != anything else
-    // Use Dart's == operator, which works for primitives (num, bool, String)
-    // and relies on List/Map implementations (which compare by identity by default).
-    // For deep comparison of lists/maps, we'd need custom logic.
-    // Python's == does deep comparison for lists/tuples/dicts. Let's mimic that.
-    if (a is List && b is List) {
-      if (a.length != b.length) return false;
-      for (int i = 0; i < a.length; i++) {
-        if (!isEqual(a[i], b[i])) return false;
-      }
-      return true;
+    return Interpreter.internalIsEqual(a, b);
+  }
+
+  // Helper to compute tuple hash (needed for using tuples as dict keys/set elements)
+  // Uses a simple combining algorithm. Similar to Python's internal tuple hash.
+  static int _computeTupleHash(List<Object?> tuple) {
+    // Based on Dart's list hash implementation strategy or Python's tuple hash
+    int hash = 0;
+    for (var element in tuple) {
+      int elementHash = _computeObjectHash(element);
+      // Combine hashes (example: similar to Jenkins hash or Objects.hash)
+      hash = hash ^ (elementHash + 0x9e3779b9 + (hash << 6) + (hash >> 2));
     }
-    if (a is Map && b is Map) {
-      if (a.length != b.length) return false;
-      for (var key in a.keys) {
-        if (!b.containsKey(key) || !isEqual(a[key], b[key])) {
-          return false;
-        }
-      }
-      return true;
+    return hash;
+ }
+
+  // Helper to get hash for any hashable object
+  static int _computeObjectHash(Object? obj) {
+    if (!isHashable(obj)) {
+      // Should have been checked before calling, but defensive check
+      throw ArgumentError("Cannot compute hash for unhashable type: ${Interpreter.getTypeString(obj)}");
     }
-    return a == b; // Fallback to Dart's default equality for other types
+    if (obj is PyTuple) { // It's a tuple proxy
+      return Interpreter._computeTupleHash(obj.tuple);
+    }
+    // For primitives and other hashable types, Dart's hashCode is sufficient
+    return obj.hashCode;
   }
 
   /// Converts a runtime object into its string representation, similar to Python's `str()`.
   /// Handles `None`, `True`, `False`, numbers, strings, lists, maps, and callables.
   String stringify(Object? object) {
+    return object is String? object : repr(object);
     if (object == null) return "None";
     if (object is bool) return object ? "True" : "False";
     
@@ -2239,11 +2514,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       // return "'${object.replaceAll("'", "\\'")}'"; // More like repr()
       return object; // More like str()
     }
-    if (object is List) {
-      // Recursively stringify elements: [item1, item2]
-      return '[${object.map((e) => e is String? "'$e'" : stringify(e)).join(', ')}]';
+    if (object is PyList) {
+      return '[${object.list.map(repr).join(', ')}]';
     }
-    if (object is Map) {
+    if (object is PyTuple) {
+      // Tuple with single element needs comma: (item,)
+      String content = object.tuple.map(repr).join(', ');
+      if (object.tuple.length == 1) content += ',';
+      return '($content)';
+    }
+    if (object is Set) {
+     if (object.isEmpty) return "set()";
+     return '{${object.map(repr).join(', ')}}';
+  }
+  if (object is Map) {
       // {key1: value1, key2: value2}
       return '{${object.entries.map((e) {
         var k=e.key;

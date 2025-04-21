@@ -493,7 +493,7 @@ class Parser {
     // Add 'in' operator here? Or handle separately. Let's keep it simple for now.
     while (match([
       TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL,
-      TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL,
+      TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL, TokenType.IN,
     ])) {
       Token operator = previous();
       Expr right = lambda();
@@ -762,21 +762,83 @@ class Parser {
 
     if (match([TokenType.LEFT_BRACE])) {
       Token brace = previous();
-      List<Expr> keys = [];
-      List<Expr> values = [];
+      List<Expr> keys = [];  // Temp list for potential keys OR set elements
+      List<Expr> values = []; // Temp list for potential values
       if (!check(TokenType.RIGHT_BRACE)) {
         do {
           if (check(TokenType.RIGHT_BRACE)) break;
-          Expr key = expression();
-          keys.add(key);
-          consume(TokenType.COLON, "Expect ':' after dictionary key.");
-          Expr value = expression();
-          values.add(value);
+          Expr keyOrElement  = expression();
+          if (match([TokenType.COLON])) {
+            // It's a dictionary entry
+            if (values.length != keys.length) {
+              // This means we previously parsed a set element, now mixing with dict entry
+              throw error(previous(), "Cannot mix set elements and dict key-value pairs in the same literal.");
+            }
+            Expr value = expression();
+            keys.add(keyOrElement);
+            values.add(value);
+          } else {
+            // It's potentially a set element
+            if (values.isNotEmpty) {
+              // This means we previously parsed dict entries, now mixing with set element
+              throw error(peek(), "Cannot mix set elements and dict key-value pairs in the same literal.");
+              // Note: Check based on peek(), as no COLON was matched
+            }
+            keys.add(keyOrElement); // Store as potential set element
+          }
         } while (match([TokenType.COMMA]));
       }
-      consume(TokenType.RIGHT_BRACE, "Expect '}' after dictionary entries.");
-      return DictLiteralExpr(brace, keys, values);
+      consume(TokenType.RIGHT_BRACE, "Expect '}' after set elements or dictionary entries.");
+      if (values.isNotEmpty) {
+        // If we collected values, it was a dictionary
+        if (keys.length != values.length) {
+            // Should not happen due to checks above, but safety first
+            throw error(brace, "Internal parser error: Mismatched keys/values in dictionary literal.");
+        }
+        return DictLiteralExpr(brace, keys, values);
+      } else {
+        // If no values were collected, it was a set (or empty dict {})
+        if (keys.isEmpty) {
+          // It's an empty dict {}
+          return DictLiteralExpr(brace, [], []);
+        } else {
+          // It's a set literal
+          return SetLiteralExpr(brace, keys); // keys list now contains set elements
+        }
+      }
     }
+
+    // --- Tuple/Grouping Parentheses Handling ---
+    if (match([TokenType.LEFT_PAREN])) {
+      Token paren = previous();
+      // Case 1: Empty tuple ()
+      if (check(TokenType.RIGHT_PAREN)) {
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after '('.");
+        return TupleLiteralExpr(paren, []); // Empty tuple
+      }
+      Expr expr = expression(); // Parse the first expression
+      // Case 2: Single element tuple (expr,)
+      if (match([TokenType.COMMA])) {
+        List<Expr> elements = [expr];
+        // Parse remaining elements if any
+        while (!check(TokenType.RIGHT_PAREN) && !isAtEnd()) {
+          // Allow trailing comma: (a, b, )
+          if (peek().type == TokenType.RIGHT_PAREN) break;
+          elements.add(expression());
+          if (!match([TokenType.COMMA])) {
+            // If no comma follows, the next MUST be ')'
+            break;
+          }
+        }
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after tuple elements.");
+        return TupleLiteralExpr(paren, elements);
+      }
+      // Case 3: Grouping expression (expr)
+      else {
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
+        return GroupingExpr(expr);
+      }
+    } 
 
     if (match([TokenType.IDENTIFIER])) {
       // Check if it's a built-in function name we didn't make a keyword?
@@ -785,13 +847,6 @@ class Parser {
       // if (nameToken.lexeme == "range") { /* special handling? */ }
       // For now, all identifiers are variables unless called.
       return VariableExpr(previous());
-    }
-
-    if (match([TokenType.LEFT_PAREN])) {
-      // Grouping (...)
-      Expr expr = expression();
-      consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
-      return GroupingExpr(expr);
     }
 
     // Error: Expect expression

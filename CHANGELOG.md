@@ -1,3 +1,6 @@
+## 1.1.4
+- added set and tuple
+
 ## 1.1.3
 - added built-in methods for list (but not `list.sort()` yet), dict, str
 

@@ -53,7 +53,7 @@ int expectInt(
     String contextDesc) {
   if (arg is int) return arg;
   if (arg is double && arg == arg.truncateToDouble()) return arg.toInt();
-  // Use interpreter.getTypeString if needed for better error message (requires passing interpreter)
+  // Use Interpreter.getTypeString if needed for better error message (requires passing interpreter)
   // Or keep the simpler message:
   throw "'$contextDesc' argument must be an integer (got ${arg?.runtimeType ?? 'None'}).";
 }
@@ -99,13 +99,38 @@ final Map<String, PyCallableNativeImpl> stringMethodImpls = {
   'rstrip': strRstrip,
 };
 
+final Map<String, PyCallableNativeImpl> tupleMethodImpls = {
+  'count': _tupleCount,
+  'index': _tupleIndex,
+};
+
+final Map<String, PyCallableNativeImpl> setMethodImpls = {
+  'add': _setAdd,
+  'remove': _setRemove, // Removes element, raises KeyError if not found
+  'discard': _setDiscard, // Removes element, does nothing if not found
+  'pop': _setPop,       // Removes and returns arbitrary element, raises KeyError if empty
+  'clear': _setClear,
+  'copy': _setCopy,
+  'union': _setUnion,          // or | operator (implement?)
+  'intersection': _setIntersection, // or & operator (implement?)
+  'difference': _setDifference,   // or - operator (implement?)
+  // 'symmetric_difference': _setSymmetricDifference, // or ^ operator (implement?)
+  'isdisjoint': _setIsdisjoint,
+  'issubset': _setIsSubset,    // or <= operator (implement?)
+  'issuperset': _setIsSuperset, // or >= operator (implement?)
+  'update': _setUpdate,        // or |= operator (implement?)
+  // 'intersection_update': _setIntersectionUpdate, // or &= operator (implement?)
+  // 'difference_update': _setDifferenceUpdate,     // or -= operator (implement?)
+  // 'symmetric_difference_update': _setSymmetricDifferenceUpdate, // or ^= operator (implement?)
+};
+
 // --- List Methods ---
 
 /// Implementation for `list.clear()`
 Object? listClear(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
   checkNumArgs('clear', positionalArgs, keywordArgs, required: 0); // No args
   checkNoKeywords('clear', keywordArgs);
-  (receiver as List).clear();
+  (receiver as PyList).list.clear();
   return null; // clear returns None
 }
 
@@ -115,7 +140,7 @@ Object? listClear(Interpreter interpreter, Object receiver, List<Object?> positi
   Object? listAppend(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
     checkNumArgs('append', positionalArgs, keywordArgs, required: 1);
     checkNoKeywords('append', keywordArgs);
-    (receiver as List).add(positionalArgs[0]);
+    (receiver as PyList).list.add(positionalArgs[0]);
     return null; // append returns None
   }
 
@@ -130,7 +155,7 @@ Object? listClear(Interpreter interpreter, Object receiver, List<Object?> positi
       throw RuntimeError(Interpreter.builtInToken('insert'), "TypeError: $e");
     }
     final item = positionalArgs[1];
-    List list = receiver as List;
+    List list = (receiver as PyList).list;
 
     // Adjust index like Python insert (clamps to bounds)
     if (index < 0) index += list.length;
@@ -146,7 +171,7 @@ Object? listClear(Interpreter interpreter, Object receiver, List<Object?> positi
     checkNumArgs('remove', positionalArgs, keywordArgs, required: 1);
     checkNoKeywords('remove', keywordArgs);
     final valueToRemove = positionalArgs[0];
-    List list = receiver as List;
+    List list = (receiver as PyList).list;
     int indexToRemove = -1;
 
     // Find the first occurrence using the interpreter's isEqual
@@ -168,7 +193,7 @@ Object? listClear(Interpreter interpreter, Object receiver, List<Object?> positi
   Object ? listPop(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
   checkNumArgs('pop', positionalArgs, keywordArgs, required: 0, maxOptional: 1); // 0 or 1 arg
   checkNoKeywords('pop', keywordArgs);
-  List list = receiver as List;
+  List list = (receiver as PyList).list;
   if (list.isEmpty) {
     throw RuntimeError(Interpreter.builtInToken('pop'), "IndexError: pop from empty list");
   }
@@ -193,7 +218,7 @@ Object? listClear(Interpreter interpreter, Object receiver, List<Object?> positi
 Object ? listCopy(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
   checkNumArgs('copy', positionalArgs, keywordArgs, required: 0);
   checkNoKeywords('copy', keywordArgs);
-  return List.from(receiver as List); // Return shallow copy
+  return PyList( List.from((receiver as PyList).list)); // Return shallow copy
 }
 
 /// Implementation for `list.count(value)`
@@ -201,7 +226,7 @@ Object ? listCount(Interpreter interpreter, Object receiver, List<Object?> posit
   checkNumArgs('count', positionalArgs, keywordArgs, required: 1);
   checkNoKeywords('count', keywordArgs);
   final valueToCount = positionalArgs[0];
-  List list = receiver as List;
+  List list = (receiver as PyList).list;
   int count = 0;
   for (final item in list) {
     if (interpreter.isEqual(item, valueToCount)) {
@@ -215,7 +240,7 @@ Object ? listCount(Interpreter interpreter, Object receiver, List<Object?> posit
 Object ? listIndex(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
   checkNumArgs('index', positionalArgs, keywordArgs, required: 1, maxOptional: 2);
   checkNoKeywords('index', keywordArgs);
-  List list = receiver as List;
+  List list = (receiver as PyList).list;
   final valueToFind = positionalArgs[0];
   int start = 0;
   int stop = list.length; // Default stop is length (exclusive)
@@ -250,7 +275,7 @@ Object ? listIndex(Interpreter interpreter, Object receiver, List<Object?> posit
 Object ? listReverse(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
   checkNumArgs('reverse', positionalArgs, keywordArgs, required: 0);
   checkNoKeywords('reverse', keywordArgs);
-  List list = receiver as List;
+  List list = (receiver as PyList).list;
   // Simple in-place reverse
   int i = 0;
   int j = list.length - 1;
@@ -272,7 +297,7 @@ Object ? dictKeys(Interpreter interpreter, Object receiver, List<Object?> positi
   checkNumArgs('keys', positionalArgs, keywordArgs, required: 0);
   checkNoKeywords('keys', keywordArgs);
   // NOTE: Python returns a view. We return a list copy for simplicity.
-  return (receiver as Map).keys.toList();
+  return PyList((receiver as Map).keys.toList());
 }
 
 /// Implementation for `dict.values()`
@@ -280,7 +305,7 @@ Object ? dictValues(Interpreter interpreter, Object receiver, List<Object?> posi
   checkNumArgs('values', positionalArgs, keywordArgs, required: 0);
   checkNoKeywords('values', keywordArgs);
   // NOTE: Python returns a view. We return a list copy.
-  return (receiver as Map).values.toList();
+  return PyList((receiver as Map).values.toList());
 }
 
 /// Implementation for `dict.items()`
@@ -289,11 +314,11 @@ Object ? dictItems(Interpreter interpreter, Object receiver, List<Object?> posit
   checkNoKeywords('items', keywordArgs);
   Map map = receiver as Map;
   // NOTE: Python returns a view of (key, value) tuples. We return a list of [key, value] lists.
-  List<List<Object?>> itemsList = [];
+  List<PyList> itemsList = [];
   map.forEach((key, value) {
-    itemsList.add([key, value]);
+    itemsList.add(PyList([key, value]));
   });
-  return itemsList;
+  return PyList(itemsList);
 }
 
 /// Implementation for `dict.get(key[, default])`
@@ -306,7 +331,7 @@ Object ? dictGet(Interpreter interpreter, Object receiver, List<Object?> positio
   if (positionalArgs.length > 1) {
     defaultValue = positionalArgs[1];
   }
-  if (!interpreter.isHashable(key)) {
+  if (!Interpreter.isHashable(key)) {
     // Python's dict.get doesn't check hashability, it just won't find unhashable keys.
     // Let's mimic that. containKey handles it.
      return defaultValue;
@@ -322,9 +347,9 @@ Object ? dictPop(Interpreter interpreter, Object receiver, List<Object?> positio
   final key = positionalArgs[0];
   bool hasDefault = positionalArgs.length > 1;
   Object? defaultValue = hasDefault ? positionalArgs[1] : null;
-  if (!interpreter.isHashable(key)) {
+  if (!Interpreter.isHashable(key)) {
      // Python raises TypeError here if key is unhashable
-      throw RuntimeError(Interpreter.builtInToken('pop'), "TypeError: unhashable type: '${interpreter.getTypeString(key)}'");
+      throw RuntimeError(Interpreter.builtInToken('pop'), "TypeError: unhashable type: '${Interpreter.getTypeString(key)}'");
   }
   if (map.containsKey(key)) {
     return map.remove(key); // remove returns the value associated with the key
@@ -356,38 +381,41 @@ Object ? dictCopy(Interpreter interpreter, Object receiver, List<Object?> positi
 Object ? dictUpdate(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
   checkNumArgs('update', positionalArgs, keywordArgs, allowKeywords: true, required: 0, maxOptional: 1); // 0 or 1 positional arg
   
-  Map targetMap = receiver as Map;
+  Map targetMap   = receiver as Map;
 
   if (positionalArgs.isNotEmpty) {
     final other = positionalArgs[0];
     if (other is Map) {
       // Update from another map
       other.forEach((key, value) {
-        if (!interpreter.isHashable(key)) {
-          throw RuntimeError(Interpreter.builtInToken('update'), "TypeError: unhashable type: '${interpreter.getTypeString(key)}'");
+        if (!Interpreter.isHashable(key)) {
+          throw RuntimeError(Interpreter.builtInToken('update'), "TypeError: unhashable type: '${Interpreter.getTypeString(key)}'");
         }
         targetMap[key] = value;
       });
-    } else if (other is List) {
+    } else if (other is PyList) {
       // Update from an iterable of key-value pairs (represented as lists)
-      for (var item in other) {
-        if ((item is List || item is String) && item.length == 2) {
-          final key = item[0];
-          final value = item[1];
-          if (!interpreter.isHashable(key)) {
-            throw RuntimeError(Interpreter.builtInToken('update'), "TypeError: unhashable type: '${interpreter.getTypeString(key)}'");
+      for (var item in other.list) {
+        List? pair;
+        if (item is String) pair = item as List;
+        if (item is PyList) pair = item.list;
+        if ((pair is List || pair is String) && pair!.length == 2) {
+          final key = pair[0];
+          final value = pair[1];
+          if (!Interpreter.isHashable(key)) {
+            throw RuntimeError(Interpreter.builtInToken('update'), "TypeError: unhashable type: '${Interpreter.getTypeString(key)}'");
           }
           targetMap[key] = value;
-        } else if (item is List || item is String) {
+        } else if (pair is List || pair is String) {
           throw RuntimeError(Interpreter.builtInToken('dict'),
-            "ValueError: dictionary update sequence element #${other.indexOf(item)} has length ${item.length}; 2 is required");
+            "ValueError: dictionary update sequence element #${other.list.indexOf(item)} has length ${pair!.length}; 2 is required");
         } else {
-          throw RuntimeError(Interpreter.builtInToken('dict'), "ValueError: cannot convert dictionary update sequence element #${other.indexOf(item)} to a sequence");
+          throw RuntimeError(Interpreter.builtInToken('dict'), "ValueError: cannot convert dictionary update sequence element #${other.list.indexOf(item)} to a sequence");
         }
       }
     } else {
       // Type not supported for update
-       throw RuntimeError(Interpreter.builtInToken('update'), "TypeError: '${interpreter.getTypeString(other)}' object is not iterable");
+       throw RuntimeError(Interpreter.builtInToken('update'), "TypeError: '${Interpreter.getTypeString(other)}' object is not iterable");
     }
   }
   keywordArgs.forEach((key, value) {
@@ -407,7 +435,7 @@ Object ? strFind(Interpreter interpreter, Object receiver, List<Object?> positio
   Object? subObj = positionalArgs[0];
 
   if (subObj is! String) {
-     throw RuntimeError(Interpreter.builtInToken('find'), "TypeError: must be str, not ${interpreter.getTypeString(subObj)}");
+     throw RuntimeError(Interpreter.builtInToken('find'), "TypeError: must be str, not ${Interpreter.getTypeString(subObj)}");
   }
   String sub = subObj;
 
@@ -454,7 +482,7 @@ Object ? strCount(Interpreter interpreter, Object receiver, List<Object?> positi
   String str = receiver as String;
   Object? subObj = positionalArgs[0];
   if (subObj is! String) {
-     throw RuntimeError(Interpreter.builtInToken('count'), "TypeError: must be str, not ${interpreter.getTypeString(subObj)}");
+     throw RuntimeError(Interpreter.builtInToken('count'), "TypeError: must be str, not ${Interpreter.getTypeString(subObj)}");
   }
   String sub = subObj;
 
@@ -508,7 +536,7 @@ Object ? strReplace(Interpreter interpreter, Object receiver, List<Object?> posi
   Object? oldObj = positionalArgs[0];
   Object? newObj = positionalArgs[1];
   if (oldObj is! String || newObj is! String) {
-      throw RuntimeError(Interpreter.builtInToken('replace'), "TypeError: replace() argument must be str, not ${interpreter.getTypeString(oldObj is! String ? oldObj : newObj)}");
+      throw RuntimeError(Interpreter.builtInToken('replace'), "TypeError: replace() argument must be str, not ${Interpreter.getTypeString(oldObj is! String ? oldObj : newObj)}");
   }
   String oldSub = oldObj;
   String newSub = newObj;
@@ -554,7 +582,7 @@ Object ? strSplit(Interpreter interpreter, Object receiver, List<Object?> positi
   if (positionalArgs.isNotEmpty) {
     sep = positionalArgs[0];
     if (sep != null && sep is! String) {
-      throw RuntimeError(Interpreter.builtInToken('split'), "TypeError: must be str or None, not ${interpreter.getTypeString(sep)}");
+      throw RuntimeError(Interpreter.builtInToken('split'), "TypeError: must be str or None, not ${Interpreter.getTypeString(sep)}");
     }
   }
   if (positionalArgs.length > 1) {
@@ -642,14 +670,14 @@ Object ? strJoin(Interpreter interpreter, Object receiver, List<Object?> positio
   String separator = receiver as String;
   Object? iterableObj = positionalArgs[0];
 
-  if (iterableObj is List) {
+  if (iterableObj is PyList) {
     // Check all elements are strings
     List<String> stringList = [];
     for (int i = 0; i < iterableObj.length; i++) {
-      if (iterableObj[i] is String) {
-        stringList.add(iterableObj[i] as String);
+      if (iterableObj.list[i] is String) {
+        stringList.add(iterableObj.list[i] as String);
       } else {
-        throw RuntimeError(Interpreter.builtInToken('join'), "TypeError: sequence item $i: expected str instance, ${interpreter.getTypeString(iterableObj[i])} found");
+        throw RuntimeError(Interpreter.builtInToken('join'), "TypeError: sequence item $i: expected str instance, ${Interpreter.getTypeString(iterableObj.list[i])} found");
       }
     }
     return stringList.join(separator);
@@ -659,7 +687,7 @@ Object ? strJoin(Interpreter interpreter, Object receiver, List<Object?> positio
   }
   // TODO: Handle other iterable types if added
 
-  throw RuntimeError(Interpreter.builtInToken('join'), "TypeError: can only join an iterable of strings (found ${interpreter.getTypeString(iterableObj)})");
+  throw RuntimeError(Interpreter.builtInToken('join'), "TypeError: can only join an iterable of strings (found ${Interpreter.getTypeString(iterableObj)})");
 }
 
 /// Implementation for `str.upper()`
@@ -684,7 +712,7 @@ Object ? strStartsWith(Interpreter interpreter, Object receiver, List<Object?> p
   Object? prefixObj = positionalArgs[0];
   // TODO: Python allows a tuple of prefixes. Simplify to single string for now.
   if (prefixObj is! String) {
-    throw RuntimeError(Interpreter.builtInToken('startswith'), "TypeError: startswith first arg must be str or a tuple of str, not ${interpreter.getTypeString(prefixObj)}");
+    throw RuntimeError(Interpreter.builtInToken('startswith'), "TypeError: startswith first arg must be str or a tuple of str, not ${Interpreter.getTypeString(prefixObj)}");
   }
   String prefix = prefixObj;
 
@@ -729,7 +757,7 @@ Object ? strEndsWith(Interpreter interpreter, Object receiver, List<Object?> pos
   // TODO: Python allows a tuple of suffixes. Simplify to single string for now.
    if (suffixObj is! String) {
     throw RuntimeError(Interpreter.builtInToken('endswith'),
-      "TypeError: endswith first arg must be str or a tuple of str, not ${interpreter.getTypeString(suffixObj)}");
+      "TypeError: endswith first arg must be str or a tuple of str, not ${Interpreter.getTypeString(suffixObj)}");
   }
   String suffix = suffixObj;
 
@@ -789,7 +817,7 @@ Object ? strStrip(Interpreter interpreter, Object receiver, List<Object?> positi
     }
     return str.substring(start, end + 1);
   } else {
-     throw RuntimeError(Interpreter.builtInToken('strip'), "TypeError: must be str or None, not ${interpreter.getTypeString(charsObj)}");
+     throw RuntimeError(Interpreter.builtInToken('strip'), "TypeError: must be str or None, not ${Interpreter.getTypeString(charsObj)}");
   }
 }
 
@@ -811,7 +839,7 @@ Object ? strLstrip(Interpreter interpreter, Object receiver, List<Object?> posit
      }
      return str.substring(start);
   } else {
-     throw RuntimeError(Interpreter.builtInToken('lstrip'), "TypeError: must be str or None, not ${interpreter.getTypeString(charsObj)}");
+     throw RuntimeError(Interpreter.builtInToken('lstrip'), "TypeError: must be str or None, not ${Interpreter.getTypeString(charsObj)}");
   }
 }
 
@@ -833,6 +861,224 @@ Object ? strRstrip(Interpreter interpreter, Object receiver, List<Object?> posit
       }
       return str.substring(0, end + 1);
   } else {
-     throw RuntimeError(Interpreter.builtInToken('rstrip'), "TypeError: must be str or None, not ${interpreter.getTypeString(charsObj)}");
+     throw RuntimeError(Interpreter.builtInToken('rstrip'), "TypeError: must be str or None, not ${Interpreter.getTypeString(charsObj)}");
   }
 }
+
+// Tuple Methods (operate on List<Object?>)
+Object? _tupleCount(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('count', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('count', keywordArgs);
+    final valueToCount = positionalArgs[0];
+    List tuple = (receiver as PyTuple).tuple;
+    int count = 0;
+    for (final item in tuple) {
+        if (interpreter.isEqual(item, valueToCount)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+Object? _tupleIndex(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('index', positionalArgs, keywordArgs, required: 1, maxOptional: 2);
+    checkNoKeywords('index', keywordArgs);
+    List tuple = (receiver as PyTuple).tuple;
+    // Logic is identical to _listIndex, maybe reuse?
+    final valueToFind = positionalArgs[0];
+    int start = 0;
+    int stop = tuple.length;
+    // ... (parse start/stop, handle slice indices, loop and check with isEqual) ...
+     try {
+        if (positionalArgs.length > 1 && positionalArgs[1] is! int) throw "TypeError: slice indices must be integers";
+        if (positionalArgs.length > 2 && positionalArgs[2] is! int) throw "TypeError: slice indices must be integers";
+        if (positionalArgs.length > 1) start = expectInt(positionalArgs[1], 'index() start');
+        if (positionalArgs.length > 2) stop = expectInt(positionalArgs[2], 'index() stop');
+    } catch (e) { /* ... TypeError ... */ throw RuntimeError(Interpreter.builtInToken('index'), "TypeError: $e"); }
+
+    // Handle Python slice indexing for start/stop
+    if (start < 0) start += tuple.length; if (start < 0) start = 0; if (start > tuple.length) start = tuple.length;
+    if (stop < 0) stop += tuple.length; if (stop < 0) stop = 0; if (stop > tuple.length) stop = tuple.length;
+
+    for (int i = start; i < stop; i++) {
+        if (interpreter.isEqual(tuple[i], valueToFind)) return i;
+    }
+    throw RuntimeError(Interpreter.builtInToken('index'), "ValueError: tuple.index(x): x not in tuple");
+}
+
+
+ // Set Methods (operate on Set<Object?>)
+ Object? _setAdd(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('add', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('add', keywordArgs);
+    Set set = receiver as Set;
+    final element = positionalArgs[0];
+    if (!Interpreter.isHashable(element)) {
+         throw RuntimeError(Interpreter.builtInToken('add'), "TypeError: unhashable type: '${Interpreter.getTypeString(element)}'");
+    }
+    // --- Python bool/int equivalence check ---
+    bool skipAdd = false;
+    if (element == true) {
+      if (set.contains(1)) skipAdd = true;
+    } else if (element == 1) {
+      if (set.contains(true)) skipAdd = true;
+    } else if (element == false) {
+      if (set.contains(0)) skipAdd = true;
+    } else if (element == 0) {
+      if (set.contains(false)) skipAdd = true;
+    }
+    if (!skipAdd) {
+        set.add(element);
+    }
+    return null; // add returns None
+ }
+
+Object? _setRemove(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('remove', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('remove', keywordArgs);
+    Set set = receiver as Set;
+    final element = positionalArgs[0];
+    if (!Interpreter.isHashable(element)) {
+         throw RuntimeError(Interpreter.builtInToken('remove'), "TypeError: unhashable type: '${Interpreter.getTypeString(element)}'");
+    }
+    bool removed = set.remove(element);
+    if (!removed) {
+         throw RuntimeError(Interpreter.builtInToken('remove'), "KeyError: ${interpreter.repr(element)}");
+    }
+    return null; // remove returns None
+ }
+
+ Object? _setDiscard(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('discard', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('discard', keywordArgs);
+    Set set = receiver as Set;
+    final element = positionalArgs[0];
+     if (!Interpreter.isHashable(element)) {
+         // discard ignores unhashable types silently in Python
+         return null;
+         // Or throw: throw RuntimeError(Interpreter.builtInToken('discard'), "TypeError: unhashable type: '${Interpreter.getTypeString(element)}'");
+     }
+    set.remove(element); // Dart's remove returns bool, but discard ignores it
+    return null; // discard returns None
+ }
+
+ Object? _setPop(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('pop', positionalArgs, keywordArgs, required: 0);
+    checkNoKeywords('pop', keywordArgs);
+    Set set = receiver as Set;
+    if (set.isEmpty) {
+        throw RuntimeError(Interpreter.builtInToken('pop'), "KeyError: 'pop from an empty set'");
+    }
+    // Get an arbitrary element, remove it, return it
+    var element = set.first; // Dart Set iteration order isn't guaranteed like Python
+    set.remove(element);
+    return element;
+ }
+
+ Object? _setClear(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('clear', positionalArgs, keywordArgs, required: 0);
+    checkNoKeywords('clear', keywordArgs);
+    (receiver as Set).clear();
+    return null;
+ }
+
+ Object? _setCopy(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('copy', positionalArgs, keywordArgs, required: 0);
+    checkNoKeywords('copy', keywordArgs);
+    return Set.from(receiver as Set); // Shallow copy
+ }
+
+ // Helper to get another set from args for binary operations
+ Set<Object?> _getOtherSet(Interpreter interpreter, String methodName, List<Object?> args) {
+     if (args.isEmpty) {
+         throw RuntimeError(Interpreter.builtInToken(methodName), "TypeError: $methodName() missing 1 required argument: 'other'");
+     }
+     Object? otherArg = args[0];
+     if (otherArg is Set) {
+         return otherArg;
+     }
+    // Python allows any iterable here, converts it to a set first
+     if (otherArg is Map) {
+      otherArg = otherArg.keys;
+    } else if (otherArg is String) {
+      otherArg = otherArg.split('');
+    } else if (otherArg is PyList) {
+      otherArg = otherArg.list;
+    } else if (otherArg is PyTuple) {
+      otherArg = otherArg.tuple;
+    }
+    if (otherArg is Iterable) {
+      Set<Object?> otherSet = {};
+      for(var item in otherArg) {
+        if (!Interpreter.isHashable(item)) {
+          throw RuntimeError(Interpreter.builtInToken(methodName), "TypeError: unhashable type: '${Interpreter.getTypeString(item)}'");
+        }
+        otherSet.add(item);
+      }
+      return otherSet;
+    }
+    throw RuntimeError(Interpreter.builtInToken(methodName), "TypeError: '${Interpreter.getTypeString(otherArg)}' object is not iterable");
+ }
+
+
+ Object? _setUnion(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    // Python's union can take multiple iterables, simplify to one 'other'
+    checkNumArgs('union', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('union', keywordArgs);
+    Set self = receiver as Set;
+    Set other = _getOtherSet(interpreter, 'union', positionalArgs);
+    return self.union(other); // Returns a new set
+ }
+
+ Object? _setIntersection(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('intersection', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('intersection', keywordArgs);
+    Set self = receiver as Set;
+    Set other = _getOtherSet(interpreter, 'intersection', positionalArgs);
+    return self.intersection(other); // Returns a new set
+ }
+
+ Object? _setDifference(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('difference', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('difference', keywordArgs);
+    Set self = receiver as Set;
+    Set other = _getOtherSet(interpreter, 'difference', positionalArgs);
+    return self.difference(other); // Returns a new set
+ }
+
+Object? _setIsdisjoint(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('isdisjoint', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('isdisjoint', keywordArgs);
+    Set self = receiver as Set;
+    Set other = _getOtherSet(interpreter, 'isdisjoint', positionalArgs);
+    return self.intersection(other).isEmpty;
+}
+
+Object? _setIsSubset(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('issubset', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('issubset', keywordArgs);
+    Set self = receiver as Set;
+    Set other = _getOtherSet(interpreter, 'issubset', positionalArgs);
+    if (self.length > other.length) return false;
+    return other.containsAll(self);
+}
+
+Object? _setIsSuperset(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+    checkNumArgs('issuperset', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('issuperset', keywordArgs);
+    Set self = receiver as Set;
+    Set other = _getOtherSet(interpreter, 'issuperset', positionalArgs);
+    if (self.length < other.length) return false;
+    return self.containsAll(other);
+}
+
+ Object? _setUpdate(Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+     // Python's update takes multiple iterables. Simplify to one.
+    checkNumArgs('update', positionalArgs, keywordArgs, required: 1);
+    checkNoKeywords('update', keywordArgs);
+    Set self = receiver as Set;
+    // Convert argument to a set (handles any iterable)
+    Set other = _getOtherSet(interpreter, 'update', positionalArgs);
+    self.addAll(other); // Modifies in-place
+    return null; // update returns None
+ }
