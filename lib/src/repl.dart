@@ -42,73 +42,126 @@ void runPrompt() {
       break;
     }
 
+    // --- Block Completion Logic ---
+    bool runTheBlock = false;
+    if (currentBlock.isEmpty && line.trim().isEmpty) continue;
+
     // Append the new line (with newline char for lexer consistency)
     currentBlock += '$line\n';
+    String trimmedLine = line.trim();
 
-    // Simple check for block continuation: does the line end with ':' or is indented?
-    // This is a heuristic and not perfect, a full parser state check would be better.
-    bool endsWithColon = line.trimRight().endsWith(':');
-    bool isEmptyLine = line.trim().isEmpty;
-    int currentIndent =
-        line.length - line.trimLeft().length; // Basic indent calculation
+    // Finish block with empty line
+    if (trimmedLine.isEmpty && currentBlock.trim().isNotEmpty) {
+      try {
+        Lexer tempLexer = Lexer(currentBlock);
+        tempLexer.scanTokens(); // scan to fill indentStack
 
-    // Attempt to determine if the block is complete *without* running the full parser yet.
-    // Heuristic: If the line is empty AND the indentation level is 0,
-    // and we have some code already, assume the block is finished.
-    // Or if the line doesn't end with ':' and isn't indented more than the start.
-    bool likelyComplete = false;
-    if (currentBlock.trim().isNotEmpty) {
-      if (isEmptyLine && currentIndent == 0) {
-        // Empty line at base level likely ends a block/statement sequence
-        likelyComplete = true;
-      } else if (!endsWithColon) {
-        // If it doesn't end with colon, need to check indentation level
-        // Try a quick lex to see if the block is likely closed by dedents
-        try {
-          Lexer tempLexer = Lexer(currentBlock);
-          tempLexer.scanTokens(); // Run lexer to check indent/dedent balance
-          // If the final indent level is back to 0 (or matches initial), it's likely complete
-          if (tempLexer.indentStack.length <= 1) {
-            likelyComplete = true;
-          }
-          // This is still imperfect - e.g., multiline strings, comments complicate it.
-        } catch (e) {
-          // If lexing fails here, it's likely incomplete or invalid anyway.
-          // Let the main 'run' call handle the actual error.
-          // Assume potentially complete to try parsing.
-          likelyComplete = true;
+        // no indentation?
+        if (tempLexer.indentStack.length <= 1) {
+              runTheBlock = checkOpenBrackets(currentBlock) == 0;
+        }
+      } catch (e) {
+        // Lexer error => try to run the code to show the error
+        runTheBlock = true;
+      }
+    } else if (currentBlock.trim().isNotEmpty) {
+      // Current line is not empty. Block will be executed when
+      // - no open brackets
+      // - last line doesnt end with ":"
+      // - last relevant line (ignoring comment) is not indented
+      List<String> lines = currentBlock.trimRight().split('\n');
+      String lastRelevantLine = '';
+      for (int i = lines.length - 1; i >= 0; i--) {
+        String l = lines[i].trim();
+        if (l.isNotEmpty && !l.startsWith('#')) {
+          lastRelevantLine = l;
+          break;
         }
       }
-      // If it ends with a colon, we always need more input.
-    } else if (isEmptyLine) {
-      // Ignore completely empty input lines
-      currentBlock = ""; // Reset
-      continue;
-    } else {
-      // Single non-empty line not ending in colon
-      likelyComplete = true;
+
+      if (checkOpenBrackets(currentBlock) > 0) {
+        runTheBlock = false; // unclosed brackets -> need more input
+      } else if (lastRelevantLine.endsWith(':')) {
+        runTheBlock = false; // if, for, while... -> need more input
+      } else {
+        // Block might be ok for execution. However, Wait for empty line to confirm - unless there
+        // is only a single line in the block
+        if (lines.where((l) => l.trim().isNotEmpty).length == 1) {
+          runTheBlock = true;
+        } else {
+          runTheBlock = false;
+        }
+      }
     }
-
-    // If the heuristic suggests the block isn't complete, prompt for more input
-    if (!likelyComplete && !isEmptyLine) {
-      // Don't force continuation on empty lines unless indented
-      continue;
+    
+    if (runTheBlock) {
+      run(currentBlock, isRepl: true);
+      // reset for next input
+      currentBlock = "";
+      hadError = false;
+      hadRuntimeError = false;
     }
-
-    // We have determined a block/statement seems complete, try running it
-    run(currentBlock, isRepl: true); // Pass the collected block
-
-    // Reset for next input cycle
-    currentBlock = "";
-    // Reset error flags for the next independent REPL input
-    hadError = false;
-    hadRuntimeError = false;
   }
   print("\nExiting REPL.");
 }
 
+int checkOpenBrackets(String block) {
+  int balance = 0;
+  bool inString = false;
+  String? stringQuote;
+  bool possibleFString = false;
+  for (int i = 0; i < block.length; i++) {
+    String char = block[i];
+    String? prevChar = i > 0 ? block[i - 1] : null;
+
+    // String flag (simplified for ' and ")
+    if (inString) {
+      if (char == stringQuote && prevChar != '\\') {
+        inString = false;
+        stringQuote = null;
+        possibleFString = false;
+      } else if (possibleFString && char == '{') {
+        // Ignore nested braces in f-string (simplified)
+        int braceLevel = 1;
+        i++;
+        while(i < block.length && braceLevel > 0) {
+          if (block[i] == '{') braceLevel++;
+          if (block[i] == '}') braceLevel--;
+          i++;
+        }
+        i--;
+      }
+    } else {
+      // f-string detection
+      if ((char == '"' || char == "'") && (prevChar?.toLowerCase() == 'f')) {
+        inString = true;
+        stringQuote = char;
+        possibleFString = true;
+      } else if (char == '"' || char == "'") {
+        inString = true;
+        stringQuote = char;
+        possibleFString = false;
+      }
+      // ignore comment until end of line
+      else if (char == '#') {
+        while (i < block.length && block[i] != '\n') {
+            i++;
+        }
+        if (i < block.length) i--; // don't skip \n at end of line
+      }
+      else if (char == '(' || char == '[' || char == '{') {
+        balance++;
+      } else if (char == ')' || char == ']' || char == '}') {
+        balance--;
+      }
+    }
+  }
+  return balance;
+}
+
 // Main execution function for source code (either from file or REPL block)
 void run(String source, {required bool isRepl}) {
+  Object? result;
   try {
     final lexer = Lexer(source);
     List<Token> tokens = lexer.scanTokens();
@@ -129,7 +182,8 @@ void run(String source, {required bool isRepl}) {
     // }
 
     // If parsing was successful, interpret the AST
-    interpreter.interpret(statements);
+    result = interpreter.interpret(statements);
+    if (result!=null) result = interpreter.repr(result);
   } on LexerError catch (e) {
     print(e);
     hadError = true; // Mark static error
@@ -150,5 +204,8 @@ void run(String source, {required bool isRepl}) {
       print(stacktrace);
     }
     hadError = true; // Treat unexpected errors as critical failures
+  }
+  if (result!=null) {
+    print(result.toString());
   }
 }

@@ -584,6 +584,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Used to validate `break` and `continue` statements.
   bool _isInLoop = false;
 
+  /// Result from the script
+  Object? _lastExpressionValue;
+
   /// Creates a new Interpreter instance.
   /// Initializes the global environment and defines built-in functions like `print` and `range`.
   Interpreter() {
@@ -1363,12 +1366,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Catches and reports [RuntimeError]s.
   /// Allows providing optional callbacks: [printCallback] to handle `print` output,
   /// and [errorCallback] to handle runtime error messages.
-  void interpret(
+  Object? interpret(
     List<Stmt> statements, [
     void Function(String)? printCallback,
     void Function(String)? errorCallback,
   ]) {
     _print = printCallback ?? _printWithBuffer;
+    hadRuntimeError = false;
+    _lastExpressionValue = null;
     try {
       for (final statement in statements) {
         execute(statement);
@@ -1379,6 +1384,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       print(e); // Report runtime errors
       // Set flag for REPL?
       hadRuntimeError = true; // Assuming hadRuntimeError is defined globally for REPL
+      _lastExpressionValue = null;
     } on ReturnValue catch (_) {
       // A ReturnValue exception should only be caught inside a function call.
       // If it reaches here, it's an error (return outside function).
@@ -1390,7 +1396,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         ),
       ); // Python gives SyntaxError
       hadRuntimeError = true;
+      _lastExpressionValue = null;
     }
+    return _lastExpressionValue;
   }
 
   // --- Statement Execution ---
@@ -1430,7 +1438,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Evaluates the expression and discards the result.
   @override
   void visitExpressionStmt(ExpressionStmt stmt) {
-    evaluate(stmt.expression);
+    _lastExpressionValue  = evaluate(stmt.expression);
   }
 
   /// Visitor method for handling a [FunctionStmt] (function definition).
