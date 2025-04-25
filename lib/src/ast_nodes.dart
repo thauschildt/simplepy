@@ -56,6 +56,8 @@ abstract class ExprVisitor<R> {
   R visitTupleLiteralExpr(TupleLiteralExpr expr);
   /// Visits a [SetLiteralExpr] node (e.g., `{1,'a'}`).
   R visitSetLiteralExpr(SetLiteralExpr expr);
+  /// Visits an f-string (e.g. f"{x}")
+  R visitFStringExpr(FStringExpr expr);
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -221,6 +223,20 @@ class LiteralExpr extends Expr {
   LiteralExpr(this.value);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitLiteralExpr(this);
+}
+
+/// Represents an f-string literal expression (e.g., f"Value: {x * 2}").
+/// The expression is parsed into a list of parts, alternating between
+/// literal string segments (as LiteralExpr) and embedded expressions.
+class FStringExpr extends Expr {
+  /// The original f-string token (including f prefix and quotes) for location/error reporting.
+  final Token token;
+  /// The list of parsed parts. Literal parts are [LiteralExpr] with string values.
+  /// Embedded expressions are the corresponding AST nodes (e.g., [VariableExpr], [BinaryExpr]).
+  final List<Expr> parts;
+  FStringExpr(this.token, this.parts);
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitFStringExpr(this);
 }
 
 /// Represents a tuple literal expression (e.g., `(1, 'a', True)`).
@@ -566,6 +582,20 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
       parenthesize("group", [expr.expression]);
   @override
   String visitLiteralExpr(LiteralExpr expr) => _stringifyLiteral(expr.value);
+   @override
+  String visitFStringExpr(FStringExpr expr) {
+    List<String> partStrings = [];
+    for (var part in expr.parts) {
+      if (part is LiteralExpr && part.value is String) {
+        // Show literal parts clearly
+        partStrings.add("'${_stringifyLiteral(part.value)}'");
+      } else {
+        // Print expression parts recursively
+        partStrings.add(printExpr(part));
+      }
+    }
+    return "(fstring ${partStrings.join(' + ')})"; // Simulate concatenation
+  }
   @override
   String visitListLiteralExpr(ListLiteralExpr expr) =>
       parenthesize("list", expr.elements);

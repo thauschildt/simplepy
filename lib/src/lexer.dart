@@ -55,6 +55,7 @@ enum TokenType {
   // Literals.
   IDENTIFIER,
   STRING,
+  F_STRING,
   NUMBER,
 
   // Keywords.
@@ -202,6 +203,16 @@ class Lexer {
   /// It calls specific helper methods (like [string], [number], [identifier])
   /// or [addToken] directly for simpler tokens. It also handles comments and whitespace.
   void scanToken() {
+
+    /*String nextChar = peek();
+    bool potentialString = (nextChar == '"' || nextChar == "'");
+    bool isFString = false;
+    if (potentialString && current > 0) {
+      if (source[current - 1] == 'f' || source[current - 1] == 'F') {
+        isFString = true;
+      }
+    }*/
+    
     String c = advance();
     switch (c) {
       case '(': addToken(TokenType.LEFT_PAREN); break;
@@ -307,7 +318,20 @@ class Lexer {
       case "'":
         string(c);
         break;
-
+      // --- Potential F-string ---
+      case 'f':
+      case 'F':
+        // Lookahead: is the next character a quotation mark?
+        if (peek() == '"' || peek() == "'") {
+          String quoteType = peek();
+          advance();
+          fstring(quoteType);
+        } else {
+          // Just an identifier. Go back to include the 'f' in the identifier name
+          current--;
+          identifier();
+        }
+        break;
       default:
         if (isDigit(c)) {
           // Backtrack because number() expects to start at the first digit
@@ -657,8 +681,52 @@ class Lexer {
 
     // Trim the surrounding quotes.
     String value = source.substring(start + 1, current - 1);
-    // TODO: Process escape sequences in 'value' here
-    addToken(TokenType.STRING, value);
+    String processedValue = _processEscapes(value);
+    addToken(TokenType.STRING, processedValue);
+  }
+
+  /// Scans an f-string literal. Finds closing quote, handles basic escapes, but preserves content.
+  void fstring(String quoteType) {  
+    int startLine = line;
+    // Start column should be the 'f', which is source[start-2]
+    int startCol = (start -0) - lineStart + 1;
+    // current position is already AFTER the opening quote here
+    while (peek() != quoteType && !isAtEnd()) {
+      // Handle escapes within f-string, they affect finding the end quote
+      if (peek() == '\\' && current + 1 < source.length) {
+        advance(); // Consume backslash
+      }
+      if (peek() == '\n') {
+        line++;
+        lineStart = current + 1;
+      }
+      advance(); // Consume character
+    }
+    if (isAtEnd()) {
+      throw LexerError(startLine, startCol, "Unterminated f-string.");
+    }
+    // The closing quote.
+    advance();
+    // Get the raw content between the quotes (Parser will handle {{, }}, and {})
+    // start was already adjusted to the 'f' prefix
+    String rawContent = source.substring(start + 2, current - 1);
+    // NO escape processing here (parser needs raw content)
+    // Lexeme includes f prefix and quotes for context
+    String lexeme = source.substring(start, current); // Include 'f' prefix
+    // Literal value is the raw content for the parser
+    tokens.add(Token(TokenType.F_STRING, lexeme, rawContent, startLine, startCol));
+  }
+
+  // Helper to process basic string escapes (can be used by string() and by fstring())
+  String _processEscapes(String value) {
+    // Very basic example, to be expanded
+    value = value.replaceAll('\\n', '\n');
+    value = value.replaceAll('\\t', '\t');
+    value = value.replaceAll('\\\\', '\\');
+    value = value.replaceAll('\\\'', '\'');
+    value = value.replaceAll('\\"', '"');
+    // Add more escapes as needed (\r, \b, \f, \uXXXX, \UXXXXXXXX)
+    return value;
   }
 
   /// Checks if the current character matches [expected]. If so, consumes it and returns true.

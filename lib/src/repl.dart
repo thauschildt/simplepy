@@ -34,7 +34,7 @@ void runPrompt() {
   String currentBlock = "";
 
   while (true) {
-    stdout.write(currentBlock.isEmpty ? '>>> ' : '... ');
+      stdout.write(currentBlock.isEmpty ? '>>> ' : '... ');
     String? line = stdin.readLineSync();
 
     // Handle Ctrl+D (EOF) or exit command

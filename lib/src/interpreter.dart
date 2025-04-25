@@ -2161,6 +2161,22 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     return expr.value;
   }
 
+  /// Visitor method for evaluating an [FStringExpr] (`f"..."`).
+  /// Evaluates each part expression and returns the combined string.
+  @override
+  Object? visitFStringExpr(FStringExpr expr) {
+    StringBuffer result = StringBuffer();
+    for (Expr part in expr.parts) {
+      // Evaluate each part.
+      // If it's a LiteralExpr, evaluate() returns the string value.
+      // If it's another expression node, evaluate() runs it.
+      Object? value = evaluate(part);
+      // Convert the result of the evaluation to a string
+      result.write(stringify(value));
+    }
+    return result.toString();
+  }
+
   /// Visitor method for evaluating a [ListLiteralExpr] (`[...]`).
   /// Evaluates each element expression and returns a new Dart [List].
   @override
