@@ -6,6 +6,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
 - Available python features:
   - Variable types: `int`, `float`, `bool`, `str`, `list`, `dict`, `NoneType`
     <br>(some `dict` methods with limitations)
+  - f-strings: `{value:[[fill]align][sign][0][width][.precision][dfs]}` ; `#,` and types `b/o/x/e/g/%` are not yet supported.
   - arithmetic operators: `+ - * / // ** %` and bitwise operators
   - assignments: `= += -= *= /= **= //= %=`
   - comparisons: `== > >= < <= !=`
@@ -16,6 +17,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
   `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `sum()`
   - classes (no class attributes, no multiple inheritance)
+
 
   Some more features might be added soon, but this will never become a full python interpreter.
 
@@ -32,7 +34,6 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - exceptions
   - decorators
   - async functions, generators
-  - f-strings
   - `input()` and some other built-in functions
   - complex numbers
   - anything else not mentioned as available

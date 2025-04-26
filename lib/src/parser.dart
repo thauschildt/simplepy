@@ -679,9 +679,9 @@ class Parser {
 
   /// Parses the raw content of an f-string literal into a list of parts.
   /// Parts are either LiteralExpr (for string segments) or parsed expression AST nodes.
-  List<Expr> _parseFStringContent(Token fstringToken) {
+  List<FStringPart> _parseFStringContent(Token fstringToken) {
     String content = fstringToken.literal as String;
-    List<Expr> parts = [];
+    List<FStringPart> parts = [];
     StringBuffer currentLiteral = StringBuffer();
     int i = 0;
     final int length = content.length;
@@ -693,15 +693,16 @@ class Parser {
           i += 2; // Skip both {{
         } else {
           // Start of an expression
-          // 1. Add preceding literal part if any
           if (currentLiteral.isNotEmpty) {
-            parts.add(LiteralExpr(currentLiteral.toString()));
+            parts.add(FStringLiteralPart(currentLiteral.toString()));
             currentLiteral.clear();
           }
           i++; // Move past the opening {
-          // 2. Find the matching closing } (respecting nesting)
+
+          // --- separate expression and optional format spec ---
           int exprStart = i;
           int braceLevel = 1;
+          int colonPos = -1;
           int exprEnd = -1;
           while (i < length) {
             if (content[i] == '{') {
@@ -712,82 +713,81 @@ class Parser {
                 exprEnd = i;
                 break;
               }
+            } else if (content[i] == ':' && braceLevel == 1) {
+              // Found colon for format specifier at the top level of this expression
+              if (colonPos == -1) { // save only first colon on top level
+                  colonPos = i;
+              }
             } else if (content[i] == '\'' || content[i] == '"') {
-              // Basic string handling within expression to ignore braces inside strings
               String quote = content[i];
-              i++; // Move past opening quote
+              i++;
               while(i < length && content[i] != quote) {
-                if (content[i] == '\\' && i + 1 < length) i++; // Skip escape
+                if (content[i] == '\\' && i + 1 < length) i++;
                 i++;
               }
               if (i >= length) throw ParseError(fstringToken, "Unterminated string inside f-string expression.");
-              // Keep incrementing i in the outer loop below
             }
             i++;
-          }
+          } // End of the inner loop looking for '}'
+
           if (exprEnd == -1) {
             throw ParseError(fstringToken, "Unterminated expression in f-string (missing '}')");
           }
-          // 3. Parse the expression substring
-          String exprString = content.substring(exprStart, exprEnd);
-          if (exprString.trim().isEmpty) {
+
+          // --- Extract expression and format spec ---
+          String exprString;
+          String? formatSpec;
+          if (colonPos != -1) {
+            exprString = content.substring(exprStart, colonPos).trim();
+            formatSpec = content.substring(colonPos + 1, exprEnd);
+          } else {
+            exprString = content.substring(exprStart, exprEnd).trim();
+            // formatSpec remains null
+          }
+
+          if (exprString.isEmpty) {
             throw ParseError(fstringToken, "Empty expression sequence in f-string is not allowed.");
           }
-          // --- Sub-parsing the expression ---
-          // Create a new lexer and parser for the expression part
-          // We need location info relative to the original fstringToken
-          int exprLine = fstringToken.line; // Approx line
-          int exprCol = fstringToken.column + (exprStart - (fstringToken.lexeme.startsWith("f'") ? 2: 1) ) ; // Approx col
-          List<Token> exprTokens;
+
+          // --- parse expression ---
+          Expr parsedExpr;
           try {
-            // Add EOF manually for the sub-lexer/parser
             Lexer exprLexer = Lexer(exprString);
-            exprTokens = exprLexer.scanTokens(); // Get tokens for the expression
-            // Adjust token locations (Optional, but good for errors)
-            for (var token in exprTokens) {
-              // This is approximate, multi-line f-strings complicate this
-              // token.line = exprLine;
-              // token.column += exprCol; // Adjust column based on position within f-string
-            }
-          } catch (e) {
-            throw ParseError(fstringToken, "Lexer error within f-string expression: '$exprString' -> $e");
-          }
-          if (exprTokens.isEmpty || exprTokens.first.type == TokenType.EOF) {
-              throw ParseError(fstringToken, "Empty expression in f-string.");
-          }
-          try {
-            // Error callback für Sub-Parser? Vorerst nicht.
+            List<Token> exprTokens = exprLexer.scanTokens();
+              if (exprTokens.isEmpty || exprTokens.first.type == TokenType.EOF) {
+                throw ParseError(fstringToken, "Empty expression in f-string.");
+              }
             Parser exprParser = Parser(exprTokens);
-            Expr parsedExpr = exprParser.expression(); // Parse the expression
-            // Check if the sub-parser consumed all tokens except EOF
-            if (!exprParser.isAtEnd() && exprParser.peek().type != TokenType.EOF) {
-              throw ParseError(exprTokens[exprParser.current], "Unexpected token inside f-string expression near '${exprParser.peek().lexeme}'");
+            parsedExpr = exprParser.expression();
+            if (exprParser.current < exprTokens.length -1) {
+             Token unexpectedToken = exprTokens[exprParser.current];
+             throw ParseError(unexpectedToken,
+               "Unexpected token inside f-string expression near '${unexpectedToken.lexeme}' after parsing expression '$exprString'. Expected end of expression.");
             }
-            parts.add(parsedExpr); // Add the parsed expression AST node
           } catch(e) {
-            // Catch ParseError from sub-parser
             throw ParseError(fstringToken, "Parser error within f-string expression: '$exprString' -> $e");
           }
+
+          parts.add(FStringExpressionPart(parsedExpr, formatSpec));
           i = exprEnd + 1; // Move past the closing }
-        } // End of expression handling
+        }
       } else if (content[i] == '}') {
         if (i + 1 < length && content[i + 1] == '}') {
-          // Escaped }} -> add single } to literal
           currentLiteral.write('}');
-          i += 2; // Skip both }}
+          i += 2;
+          continue;
         } else {
-          // Syntax error: Unmatched closing brace
           throw ParseError(fstringToken, "f-string: single '}' is not allowed");
         }
       } else {
-        // Regular character, add to literal part
+        // Regular character
         currentLiteral.write(content[i]);
         i++;
       }
-    } // End while loop
-    // Add any remaining literal part
+    } // End of outer while loop
+
     if (currentLiteral.isNotEmpty) {
-      parts.add(LiteralExpr(currentLiteral.toString()));
+      parts.add(FStringLiteralPart(currentLiteral.toString()));
     }
     return parts;
   }
@@ -968,7 +968,7 @@ class Parser {
     if (match([TokenType.F_STRING])) {
       Token fstringToken = previous();
       try {
-        List<Expr> parts = _parseFStringContent(fstringToken);
+        List<FStringPart> parts = _parseFStringContent(fstringToken);
         return FStringExpr(fstringToken, parts);
       } on ParseError catch(e) {
         // Re-throw with better context if possible, or just throw

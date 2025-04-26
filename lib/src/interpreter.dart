@@ -2166,15 +2166,171 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   Object? visitFStringExpr(FStringExpr expr) {
     StringBuffer result = StringBuffer();
-    for (Expr part in expr.parts) {
-      // Evaluate each part.
-      // If it's a LiteralExpr, evaluate() returns the string value.
-      // If it's another expression node, evaluate() runs it.
-      Object? value = evaluate(part);
-      // Convert the result of the evaluation to a string
-      result.write(stringify(value));
+    for (FStringPart part in expr.parts) {
+      if (part is FStringLiteralPart) {
+        result.write(part.value); // Append literal string directly
+      } else if (part is FStringExpressionPart) {
+        // Evaluate the expression part
+        Object? value = evaluate(part.expression);
+        // Apply formatting if specifier exists, otherwise stringify
+        if (part.formatSpec != null && part.formatSpec!.isNotEmpty) {
+          try {
+            result.write(_formatValue(value, part.formatSpec!));
+          } catch (e) {
+            // Catch formatting errors
+            throw RuntimeError(expr.token, "Error formatting value in f-string: $e");
+          }
+        } else {
+          // No format specifier, just convert value to string
+          result.write(stringify(value));
+        }
+      }
     }
     return result.toString();
+  }
+
+  /// Formats a value according to a Python format specifier mini-language.
+  /// Handles basic integer (d) and float (f) formatting.
+  String _formatValue(Object? value, String formatSpec) {
+    // TODO: Parse the format specifier more robustly (alignment, sign, width, precision, type)
+    // Example structure: [[fill]align][sign][#][0][width][,][.precision][type]
+
+    // --- Basic Type Extraction ---
+    String type = 's'; // Default to string formatting
+    int precision = 6; // Default float precision
+    int width = 0; // Minimum width
+    String fill = ' ';
+    String align = ''; // Default: left-align strings, right-align numbers
+    String sign = '-'; // Default sign: only for negative
+    bool thousandsSeparator = false;
+    bool zeropadding = false;
+    String remainingSpec = formatSpec;
+
+   // Check for alignment characters first
+   if (remainingSpec.length >= 2 && (remainingSpec[1] == '<' || remainingSpec[1] == '>' || remainingSpec[1] == '^'
+    || remainingSpec[1] == '=')) {
+      fill = remainingSpec[0];
+      align = remainingSpec[1];
+      remainingSpec = remainingSpec.substring(2);
+   } else if (remainingSpec.isNotEmpty && (remainingSpec[0] == '<' || remainingSpec[0] == '>' || remainingSpec[0] == '^'
+    || remainingSpec[0] == '=')) {
+      align = remainingSpec[0];
+      remainingSpec = remainingSpec.substring(1);
+   }
+    // Sign
+    if (remainingSpec.isNotEmpty && (remainingSpec[0] == '+' || remainingSpec[0] == '-' || remainingSpec[0] == ' ')) {
+      sign = remainingSpec[0];
+      remainingSpec = remainingSpec.substring(1);
+    }
+    // fill='0' without alignment
+    if (remainingSpec.length > 0 && remainingSpec[0] == '0' && fill == ' ') {
+       zeropadding = true;
+       remainingSpec = remainingSpec.substring(1);
+     }
+    // Width (simple integer parsing)
+    int w = 0;
+    while (remainingSpec.isNotEmpty && remainingSpec[0].compareTo('0') >= 0 && remainingSpec[0].compareTo('9') <= 0) {
+      w = w * 10 + (remainingSpec.codeUnitAt(0) - '0'.codeUnitAt(0));
+      remainingSpec = remainingSpec.substring(1);
+    }
+    if (w > 0) width = w;
+
+    // Precision
+    if (remainingSpec.isNotEmpty && remainingSpec[0] == '.') {
+      remainingSpec = remainingSpec.substring(1);
+      int p = 0;
+      while (remainingSpec.isNotEmpty && remainingSpec[0].compareTo('0') >= 0 && remainingSpec[0].compareTo('9') <= 0) {
+        p = p * 10 + (remainingSpec.codeUnitAt(0) - '0'.codeUnitAt(0));
+        remainingSpec = remainingSpec.substring(1);
+      }
+      precision = p;
+    }
+
+    // Type
+    if (remainingSpec.isNotEmpty) {
+      type = remainingSpec[remainingSpec.length - 1]; // Assume type is last char
+    }
+
+    if (zeropadding) {
+      fill = '0';
+      if (align == '') {
+        // 0-Flag includes '=' for numbers
+        align = type == 's' ? '<' : '=';
+      }
+    }
+
+    // --- Apply Formatting based on Type ---
+    String formattedValue;
+    switch (type) {
+      case 'd': // Integer
+        if (align=='') align='>';
+        if (value is bool) value = value ? 1 : 0; // Handle bools as ints
+        if (value is! int) {
+          // Try converting floats if they are whole numbers
+          if (value is double && value.truncateToDouble() == value) {
+            value = value.toInt();
+          } else {
+            throw FormatException("Cannot format value of type '${getTypeString(value)}' with 'd'");
+          }
+        }
+        formattedValue = value.toString();
+        // Handle sign for integer
+        if (value >= 0 && sign == '+') {
+          formattedValue = "+$formattedValue";
+        } else if (value >= 0 && sign == ' ') {
+          formattedValue = " $formattedValue";
+        }
+        // Negative sign is handled by toString()
+        break;
+      case 'f': // Float (fixed point)
+        if (align=='') align='>';
+        if (value is bool) value = value ? 1.0 : 0.0;
+        if (value is! num) throw FormatException("Cannot format value of type '${getTypeString(value)}' with 'f'");
+        double numValue = (value is int) ? value.toDouble() : value as double;
+        formattedValue = numValue.toStringAsFixed(precision);
+        // Handle sign for float
+        if (numValue >= 0 && sign == '+') {
+          formattedValue = "+$formattedValue";
+        } else if (numValue >= 0 && sign == ' ') {
+          formattedValue = " $formattedValue";
+        }
+        // Negative sign is handled by toStringAsFixed()
+        break;
+        // TODO: Add more types: 's' (string), 'e' (exponent), 'g' (general), '%' (percentage), 'b' (binary), 'o' (octal), 'x'/'X' (hex)
+      case 's': // String (default)
+      default:
+        if (align=='') align='<';
+        formattedValue = stringify(value); // Use default stringify
+        // String formatting ignores sign specifiers generally
+        break;
+    }
+
+    // --- Apply Padding and Alignment ---
+    if (width > 0 && formattedValue.length < width) {
+      int paddingNeeded = width - formattedValue.length;
+      String padding = (zeropadding? '0' : fill) * paddingNeeded;
+      switch (align) {
+        case '<': // Left align (default for strings)
+          formattedValue = formattedValue + padding;
+          break;
+        case '>': // Right align (default for numbers)
+          formattedValue = padding + formattedValue;
+          break;
+        case '^': // Center align
+          int leftPad = paddingNeeded ~/ 2;
+          int rightPad = paddingNeeded - leftPad;
+          formattedValue = (fill * leftPad) + formattedValue + (fill * rightPad);
+          break;
+        case '=': // Sign-aware padding (places pad after sign, before digits)
+          if (formattedValue.startsWith('+') || formattedValue.startsWith('-') || formattedValue.startsWith(' ')) {
+            formattedValue = formattedValue[0] + padding + formattedValue.substring(1);
+          } else {
+            formattedValue = padding + formattedValue; // Fallback like right align
+          }
+          break;
+      }
+    }
+    return formattedValue;
   }
 
   /// Visitor method for evaluating a [ListLiteralExpr] (`[...]`).

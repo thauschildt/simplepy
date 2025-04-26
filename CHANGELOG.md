@@ -1,3 +1,8 @@
+## 1.1.5
+- added f-strings: `[[fill]align][sign][0][width][.precision][dfs]`
+  `#,` and types `b/o/x/e/g/%` are not yet supported.
+- interpreter now returns value of last evaluated expression
+
 ## 1.1.4
 - added set and tuple
 

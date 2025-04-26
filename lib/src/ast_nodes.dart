@@ -225,15 +225,29 @@ class LiteralExpr extends Expr {
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitLiteralExpr(this);
 }
 
-/// Represents an f-string literal expression (e.g., f"Value: {x * 2}").
-/// The expression is parsed into a list of parts, alternating between
-/// literal string segments (as LiteralExpr) and embedded expressions.
+abstract class FStringPart {}
+
+/// Literal part within F-strings.
+class FStringLiteralPart extends FStringPart {
+  final String value;
+  FStringLiteralPart(this.value);
+}
+
+/// Expression part within F-strings including format specification.
+class FStringExpressionPart extends FStringPart {
+  /// AST node for the embedded expression.
+  final Expr expression;
+  /// Optional format specification string.
+  final String? formatSpec;
+  FStringExpressionPart(this.expression, this.formatSpec);
+}
+
+/// Represents an f-string literal expression (e.g., f"Value: {x * 2:.2f}").
 class FStringExpr extends Expr {
   /// The original f-string token (including f prefix and quotes) for location/error reporting.
   final Token token;
-  /// The list of parsed parts. Literal parts are [LiteralExpr] with string values.
-  /// Embedded expressions are the corresponding AST nodes (e.g., [VariableExpr], [BinaryExpr]).
-  final List<Expr> parts;
+  /// List of parsed parts ([FStringLiteralPart] or [FStringExpressionPart]).
+  final List<FStringPart> parts; // <- Geänderter Typ
   FStringExpr(this.token, this.parts);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitFStringExpr(this);
@@ -586,12 +600,12 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
   String visitFStringExpr(FStringExpr expr) {
     List<String> partStrings = [];
     for (var part in expr.parts) {
-      if (part is LiteralExpr && part.value is String) {
+      if (part is FStringLiteralPart) {
         // Show literal parts clearly
         partStrings.add("'${_stringifyLiteral(part.value)}'");
       } else {
         // Print expression parts recursively
-        partStrings.add(printExpr(part));
+        partStrings.add(printExpr((part as FStringExpressionPart).expression));
       }
     }
     return "(fstring ${partStrings.join(' + ')})"; // Simulate concatenation

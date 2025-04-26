@@ -788,5 +788,198 @@ def apply_to_list(func, item):
          expect((result2.error as RuntimeError).message, contains("SyntaxError: invalid syntax (assignment in lambda)"));
      });
 
-  });
+  }); // end of lambda tests
+
+  group('Interpreter F-Strings', () {
+
+    test('Basic variable interpolation', () {
+      final result = runCode('''
+name = "World"
+num = 123
+print(f"Hello {name}!")
+print(f'Value: {num}')
+''');
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals("Hello World!\nValue: 123\n"));
+    });
+
+    test('Basic expression interpolation', () {
+      final result = runCode('''
+a = 5
+b = 10
+items = [1, 2]
+print(f"Sum: {a + b}")
+print(f"Len: {len(items) * 2}")
+print(f"Upper: {'hello'.upper()}")
+''');
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals("Sum: 15\nLen: 4\nUpper: HELLO\n"));
+    });
+
+     test('Multiple expressions and types', () {
+        final result = runCode('x=1\ny=2.5\nz=True\nprint(f"Int: {x}, Float: {y}, Bool: {z}, None: {None}")');
+        expect(result.error, isNull, reason: result.error?.toString());
+        expect(result.output, equals("Int: 1, Float: 2.5, Bool: True, None: None\n"));
+     });
+
+
+    test('Literal braces {{ and }}', () {
+      final result = runCode('''
+x = "inside"
+print(f"Literal braces: {{ {x} }}")
+print(f"Double braces: {{{{ {x} }}}}") # {{ becomes { before/after expr
+print(f"Only literal: {{hello}}")
+''');
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals("Literal braces: { inside }\nDouble braces: {{ inside }}\nOnly literal: {hello}\n"));
+    });
+
+    test('Different quote types for f-string', () {
+      final result = runCode('''
+s_quote = 'single'
+d_quote = "double"
+print(f'Outer single, inner double: "{s_quote}"')
+print(f"Outer double, inner single: '{d_quote}'")
+''');
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals('Outer single, inner double: "single"\nOuter double, inner single: \'double\'\n'));
+    });
+
+    test('Integer formatting (:d)', () {
+      final result = runCode('''
+val = 123
+neg_val = -123
+print(f"Default: {val:d}")
+print(f"Width 5: {val:5d}")    # Right align default
+print(f"Width 5 Left: {val:<5d}")
+print(f"Width 5 Center: {val:^5d}")
+print(f"Width 5 Sign Pad: {val:=5d}") # Not very useful without sign
+print(f"Width 5 Sign Pad Neg: {neg_val:=5d}")
+print(f"Fill Underscore Width 5 Left: {val:_<5d}")
+print(f"Sign '+': {val:+d}")
+print(f"Sign '+': {neg_val:+d}")
+print(f"Sign ' ': {val: d}")
+print(f"Sign ' ': {neg_val: d}")
+print(f"Bool True: {True:d}")
+print(f"Bool False: {False:d}")
+''');
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals("Default: 123\nWidth 5:   123\nWidth 5 Left: 123  \nWidth 5 Center:  123 \nWidth 5 Sign Pad:   123\nWidth 5 Sign Pad Neg: - 123\nFill Underscore Width 5 Left: 123__\nSign '+': +123\nSign '+': -123\nSign ' ':  123\nSign ' ': -123\nBool True: 1\nBool False: 0\n"));
+      // Check error for non-int
+      expect(runCode("print(f\"{'abc':d}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Cannot format value of type 'str' with 'd'")));
+      // Allow float if whole number? (Current impl allows this)
+      expect(runCode("print(f'{123.0:d}')").output, equals("123\n"));
+      expect(runCode("print(f'{123.5:d}')").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Cannot format value of type 'float' with 'd'")));
+      expect(runCode("print(f'{123:05d}')").output, equals("00123\n"));
+      expect(runCode("print(f'{-123:05d}')").output, equals("-0123\n"));
+      expect(runCode("print(f'{123:<05d}')").output, equals("12300\n"));
+      expect(runCode("print(f'{123:^05d}')").output, equals("01230\n"));
+    });
+
+    test('Float formatting (:f)', () {
+        final result = runCode('''
+val = 123.456
+neg_val = -123.456
+print(f"Default Precision: {val:f}") # Default 6
+print(f"Precision 2: {val:.2f}")
+print(f"Precision 0: {val:.0f}")
+print(f"Width 10 Prec 2: {val:10.2f}") # Right align default
+print(f"Width 10 Prec 2 Left: {val:<10.2f}")
+print(f"Width 10 Prec 2 Center: {val:^10.2f}")
+print(f"Width 10 Prec 2 Sign Pad: {val:=10.2f}") # Not very useful without sign
+print(f"Width 10 Prec 2 Sign Pad Neg: {neg_val:=10.2f}")
+print(f"Fill Zero Width 10 Prec 2: {val:010.2f}") # Implicit right-align
+print(f"Fill Underscore Width 10 Prec 2 Left: {val:_<10.2f}")
+print(f"Sign '+': {val:+.2f}")
+print(f"Sign '+': {neg_val:+.2f}")
+print(f"Sign ' ': {val: .2f}")
+print(f"Sign ' ': {neg_val: .2f}")
+print(f"Int as Float: {123:.2f}")
+print(f"Bool True as Float: {True:.1f}")
+''');
+        expect(result.error, isNull, reason: result.error?.toString());
+        expect(result.output, equals(
+            "Default Precision: 123.456000\n" +
+            "Precision 2: 123.46\n" + // Check rounding
+            "Precision 0: 123\n" +    // Check rounding
+            "Width 10 Prec 2:     123.46\n" +
+            "Width 10 Prec 2 Left: 123.46    \n" +
+            "Width 10 Prec 2 Center:   123.46  \n" + // Check spacing
+            "Width 10 Prec 2 Sign Pad:     123.46\n" +
+            "Width 10 Prec 2 Sign Pad Neg: -   123.46\n" +
+            "Fill Zero Width 10 Prec 2: 0000123.46\n" +
+            "Fill Underscore Width 10 Prec 2 Left: 123.46____\n" +
+            "Sign '+': +123.46\n" +
+            "Sign '+': -123.46\n" +
+            "Sign ' ':  123.46\n" +
+            "Sign ' ': -123.46\n" +
+            "Int as Float: 123.00\n" +
+            "Bool True as Float: 1.0\n"
+            ));
+        // Check error for non-numeric
+        expect(runCode("print(f\"{'abc':f}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Cannot format value of type 'str' with 'f'")));
+        expect(runCode("print(f'{None:.2f}')").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Cannot format value of type 'NoneType' with 'f'")));
+
+    });
+
+    test('String formatting (:s or default)', () {
+       final result = runCode('''
+val = "hello"
+num = 123
+print(f"Default: {val}")
+print(f"Spec s: {val:s}")
+print(f"Width 10: {val:10}")     # Left align default for strings
+print(f"Width 10 Right: {val:>10}")
+print(f"Width 10 Center: {val:^10}")
+print(f"Fill Underscore Width 10: {val:_>10}")
+print(f"Number as String: {num}")
+print(f"Number as String Width 5: {num:>5}")
+print(f"None as String: {None}")
+''');
+       expect(result.error, isNull, reason: result.error?.toString());
+       expect(result.output, equals(
+            "Default: hello\n" +
+            "Spec s: hello\n" +
+            "Width 10: hello     \n" + // Left align
+            "Width 10 Right:      hello\n" +
+            "Width 10 Center:   hello   \n" + // Check spacing
+            "Fill Underscore Width 10: _____hello\n" +
+            "Number as String: 123\n"+
+            "Number as String Width 5:   123\n"+ // Right aligned implicitly? Check _formatValue default align
+            "None as String: None\n"
+       ));
+       // Test width with fill/align on numbers formatted as string
+       expect(runCode("print(f'{123:_^7}')").output, equals("__123__\n"));
+    });
+
+     test('Complex expressions and formatting', () {
+       final result = runCode('''
+items = ["a", "b"]
+x = 12.345
+print(f"Item count: {len(items):03d}, Average: {x / 2:^10.2f}")
+''');
+        expect(result.error, isNull, reason: result.error?.toString());
+       expect(result.output, equals("Item count: 002, Average:    6.17   \n")); // Check rounding and spacing
+     });
+
+    test('F-String Syntax Errors (Parse Time)', () {
+      // Error reporting depends heavily on the sub-parser implementation
+      expect(runCode('f"Value: {1 + "').error, isA<ParseError>().having((e)=>e.message, 'message', contains("Unterminated expression")));
+      expect(runCode('f"Value: {"').error, isA<ParseError>().having((e)=>e.message, 'message', contains("missing '}'")));
+      expect(runCode('f"Value: {1+}"').error, isA<ParseError>().having((e)=>e.message, 'message', contains("Parser error within f-string expression"))); // Error from sub-parser
+      expect(runCode('f"Value: {}"').error, isA<ParseError>().having((e)=>e.message, 'message', contains("Empty expression")));
+      expect(runCode('f"Value: }"').error, isA<ParseError>().having((e)=>e.message, 'message', contains("single '}' is not allowed")));
+      expect(runCode('f"Value: {1:}"').error, isNull); // Empty format specifier is allowed
+      // Unterminated f-string (Lexer error, might not be caught cleanly by runCode)
+      final resultUnterm = runCode('f"abc');
+      expect(resultUnterm.error, isA<LexerError>().having((e)=>e.message, 'message', contains("Unterminated f-string")));
+    });
+
+    test('F-String Formatting Errors (Runtime Time)', () {
+       expect(runCode("print(f\"{'text':d}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Error formatting value")));
+       //expect(runCode("print(f\"{123:x.2f}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Error formatting value"))); // Invalid combination
+    });
+
+
+  }); // end of fstring tests
 }
