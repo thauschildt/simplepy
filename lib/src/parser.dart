@@ -527,17 +527,15 @@ class Parser {
     }
     // Logic similar to parsing parameters in functionDeclaration(), but stops at COLON instead of RIGHT_PAREN
     bool parsingOptional = false;
-    bool parsingArgs = false;
-    bool parsingKwargs = false;
     // TODO: check correct order of positional, optional, *args, **kwargs
     do { // Use do-while because we checked COLON already, so at least one param expected if not empty
       if (parameters.length >= 255) throw error(peek(), "Can't have more than 255 parameters.");
       if (match([TokenType.STAR_STAR])) { // **kwargs
-        parsingKwargs = true; parsingOptional = false; parsingArgs = false;
+        parsingOptional = false;
         Token paramName = consume(TokenType.IDENTIFIER, "Expect identifier after '**'.");
         parameters.add(StarStarKwargsParameter(paramName));
       } else if (match([TokenType.STAR])) { // *args
-        parsingArgs = true; parsingOptional = false;
+        parsingOptional = false;
         Token paramName = consume(TokenType.IDENTIFIER, "Expect identifier after '*'.");
         parameters.add(StarArgsParameter(paramName));
       } else { // Required or Optional

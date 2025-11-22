@@ -204,15 +204,6 @@ class Lexer {
   /// or [addToken] directly for simpler tokens. It also handles comments and whitespace.
   void scanToken() {
 
-    /*String nextChar = peek();
-    bool potentialString = (nextChar == '"' || nextChar == "'");
-    bool isFString = false;
-    if (potentialString && current > 0) {
-      if (source[current - 1] == 'f' || source[current - 1] == 'F') {
-        isFString = true;
-      }
-    }*/
-    
     String c = advance();
     switch (c) {
       case '(': addToken(TokenType.LEFT_PAREN); break;
@@ -522,14 +513,12 @@ class Lexer {
     // 3. Consume optional fractional part
     //    This runs if we didn't start with a dot AND a dot follows the integer part,
     //    OR if we *did* start with a dot (because we need to consume the digits after it).
-    bool dotSeenAfterInteger = false;
     if (peek() == '.') {
         if (startsWithDot) {
             // We already consumed the starting dot. This would be a second dot.
             throw LexerError(line, currentColumn(), "Invalid syntax: multiple decimal points in number.");
         }
         isFloat = true;
-        dotSeenAfterInteger = true;
         advance(); // Consume '.'
     }
     if (isFloat) { // Consume digits if it's a float (either startsWithDot or dotSeenAfterInteger)

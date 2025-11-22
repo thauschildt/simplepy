@@ -276,7 +276,6 @@ class PyFunction extends PyCallable {
     // --- Bind 'self' if this is a method call ---
     String? selfParamName;
     int parameterOffset = 0; // How many parameters to skip (0 or 1 for self)
-    int paramsAvailableForArgs = params.length;
     if (receiver != null) {
       if (params.isEmpty && declaration!=null) {
         throw RuntimeError(declaration!.name, "TypeError: Method '${declaration!.name.lexeme}' called on instance but has no parameters (missing 'self'?)");
@@ -284,7 +283,6 @@ class PyFunction extends PyCallable {
       selfParamName = params[0].name.lexeme;
       environment.define(selfParamName, receiver);
       parameterOffset = 1; // Skip 'self' when matching against passed args
-      paramsAvailableForArgs = params.length - 1;
     }
     // --- Argument to Parameter Binding ---
     int positionalArgIndex = 0;
@@ -2206,7 +2204,6 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     String fill = ' ';
     String align = ''; // Default: left-align strings, right-align numbers
     String sign = '-'; // Default sign: only for negative
-    bool thousandsSeparator = false;
     bool zeropadding = false;
     String remainingSpec = formatSpec;
 
@@ -2683,49 +2680,5 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Handles `None`, `True`, `False`, numbers, strings, lists, maps, and callables.
   String stringify(Object? object) {
     return object is String? object : repr(object);
-    if (object == null) return "None";
-    if (object is bool) return object ? "True" : "False";
-    
-    if (object is num) {
-       // Handle NaN, Infinity for str()
-      if (object is double) {
-        if (object.isNaN) return "nan";
-        if (object.isInfinite) return object.isNegative ? "-inf" : "inf";
-      }
-      return object.toString();
-    }
-    if (object is String) {
-      // return "'${object.replaceAll("'", "\\'")}'"; // More like repr()
-      return object; // More like str()
-    }
-    if (object is PyList) {
-      return '[${object.list.map(repr).join(', ')}]';
-    }
-    if (object is PyTuple) {
-      // Tuple with single element needs comma: (item,)
-      String content = object.tuple.map(repr).join(', ');
-      if (object.tuple.length == 1) content += ',';
-      return '($content)';
-    }
-    if (object is Set) {
-     if (object.isEmpty) return "set()";
-     return '{${object.map(repr).join(', ')}}';
   }
-  if (object is Map) {
-      // {key1: value1, key2: value2}
-      return '{${object.entries.map((e) {
-        var k=e.key;
-        if (k is String) k="'$k'";
-          return '$k: ${stringify(e.value)}';
-        }).join(', ')}}';
-    }
-    if (object is PyCallable) {
-      return object.toString(); // Use the custom toString from PyFunction/NativeFunction
-    }
-    // Add custom stringification for other types (classes, etc.) if needed
-
-    // Default fallback using Dart's toString()
-    return object.toString();
-  }
-
 }
