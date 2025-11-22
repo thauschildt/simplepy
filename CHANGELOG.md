@@ -1,3 +1,6 @@
+## 1.2.2
+- fix remaining linter warnings
+
 ## 1.2.1
 - improve package description and fix linter warnings
 

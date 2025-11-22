@@ -796,8 +796,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     if (positionalArgs.length > 1) {
       final baseArg = positionalArgs[1];
-      if (baseArg is int) base = baseArg;
-      else throw RuntimeError(builtInToken('int'), "TypeError: 'base' argument must be an integer");
+      if (baseArg is int) {
+        base = baseArg;
+      } else {
+        throw RuntimeError(builtInToken('int'), "TypeError: 'base' argument must be an integer");
+      }
       if (value is! String) throw RuntimeError(builtInToken('int'), "TypeError: int() can't convert non-string with explicit base");
       if (base != 0 && (base < 2 || base > 36)) throw RuntimeError(builtInToken('int'), "ValueError: int() base must be >= 2 and <= 36, or 0");
     }
@@ -816,8 +819,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       else if (strValue.startsWith('0o') || strValue.startsWith('0O')) { prefix = '0o'; effectiveBase = 8; }
 
       if (base == 0) { // Auto-detect base only if base=0
-          if (prefix == null) effectiveBase = 10;
-          else strValue = strValue.substring(2);
+          if (prefix == null) {
+            effectiveBase = 10;
+          } else {
+            strValue = strValue.substring(2);
+          }
       } else if (prefix != null && base == effectiveBase) {
           // Allow explicit base matching prefix, remove prefix
           strValue = strValue.substring(2);
@@ -860,8 +866,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (strValue == '-inf') return double.negativeInfinity;
       if (strValue == 'nan') return double.nan;
       double? parsedFloat = double.tryParse(value); // Use original case
-      if (parsedFloat != null) return parsedFloat;
-      else throw RuntimeError(builtInToken('float'), "ValueError: could not convert string to float: '$value'");
+      if (parsedFloat != null) {
+        return parsedFloat;
+      } else {
+        throw RuntimeError(builtInToken('float'), "ValueError: could not convert string to float: '$value'");
+      }
     }
     throw RuntimeError(builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${Interpreter.getTypeString(value)}'");
   }
@@ -1131,10 +1140,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (positionalArgs.length == 1) {
       // Single argument version: min(iterable)
       final arg = positionalArgs[0];
-      if (arg is PyList) valuesToCompare = arg.list;
-      else if (arg is String) valuesToCompare = arg.split('');
-      else if (arg is Map) valuesToCompare = arg.keys;
-      else throw RuntimeError(builtInToken('min'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
+      if (arg is PyList) {
+        valuesToCompare = arg.list;
+      } else if (arg is String) {
+        valuesToCompare = arg.split('');
+      } else if (arg is Map) {
+        valuesToCompare = arg.keys;
+      } else {
+        throw RuntimeError(builtInToken('min'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
+      }
     } else {
       // Multiple argument version: min(arg1, arg2, ...)
       valuesToCompare = positionalArgs;
@@ -1169,10 +1183,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
       final arg = positionalArgs[0];
-      if (arg is PyList) valuesToCompare = arg.list;
-      else if (arg is String) valuesToCompare = arg.split('');
-      else if (arg is Map) valuesToCompare = arg.keys;
-      else throw RuntimeError(builtInToken('max'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
+      if (arg is PyList) {
+        valuesToCompare = arg.list;
+      } else if (arg is String) {
+        valuesToCompare = arg.split('');
+      } else if (arg is Map) {
+        valuesToCompare = arg.keys;
+      } else {
+        throw RuntimeError(builtInToken('max'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
+      }
     } else {
       valuesToCompare = positionalArgs;
     }
@@ -1207,11 +1226,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? start = (positionalArgs.length > 1) ? positionalArgs[1] : 0; // Default start is 0
 
     Iterable<Object?>? valuesToSum;
-    if (iterable is PyList) valuesToSum = iterable.list;
-    else if (iterable is PyTuple) valuesToSum = iterable.tuple;
-    else if (iterable is Map) valuesToSum = iterable.values; // Sum values, not keys
-    // Cannot sum strings in Python
-    else throw RuntimeError(builtInToken('sum'), "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable or not summable");
+    if (iterable is PyList) {
+      valuesToSum = iterable.list;
+    } else if (iterable is PyTuple) {
+      valuesToSum = iterable.tuple;
+    } else if (iterable is Map) {
+      valuesToSum = iterable.values; // Sum values, not keys
+    } else {
+      // Cannot sum strings in Python
+      throw RuntimeError(builtInToken('sum'), "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable or not summable");
+    }
     if (valuesToSum.isEmpty && start == 0) return 0; // Mimic python sum([]) == 0
 
     Object? currentSum = start;
@@ -1316,8 +1340,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         }
         if (actual > totalAllowed) {
             String takes = "exactly $required";
-            if (maxOptional > 0 && required > 0) takes = "from $required to $totalAllowed";
-            else if (maxOptional > 0) takes = "at most $totalAllowed";
+            if (maxOptional > 0 && required > 0) {
+              takes = "from $required to $totalAllowed";
+            } else if (maxOptional > 0) {
+              takes = "at most $totalAllowed";
+            }
             throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
         }
     }
