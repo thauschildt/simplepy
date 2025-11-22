@@ -51,8 +51,8 @@ ParseResult parseAndCollectErrors(String source) {
 }
 
 String printStatements(List<Stmt> statements) {
-   final printer = AstPrinter();
-   return statements.map((stmt) => printer.printStmt(stmt)).join('\n');
+  final printer = AstPrinter();
+  return statements.map((stmt) => printer.printStmt(stmt)).join('\n');
 }
 
 void main() {
@@ -69,7 +69,7 @@ void main() {
       expect(parseAndPrint(source), equals(expectedAstString));
     });
 
-     test('should parse augmented assignment', () {
+    test('should parse augmented assignment', () {
       final source = 'count += 1';
       // AST Printer uses 'aug_assign +=' format
       final expectedAstString = '(expr_stmt (aug_assign += count 1))';
@@ -95,7 +95,7 @@ if x > 0:
       );
     });
 
-     test('should parse function definition', () {
+    test('should parse function definition', () {
       final source = '''
 def add(a, b=1):
   return a + b
@@ -110,23 +110,28 @@ def add(a, b=1):
       );
     });
 
-     test('should parse function call', () {
+    test('should parse function call', () {
       final source = 'print("hello", end="")';
       // AST Printer uses 'call <callee>' and lists args
       final expectedAstString = "(expr_stmt (call print 'hello' end=''))";
       expect(parseAndPrint(source), equals(expectedAstString));
-     });
+    });
 
     test('Parser should report ParseError for invalid token sequences', () {
       final result1 = parseAndCollectErrors('..'); // Two dots
-      expect(result1.hasErrors, isTrue); // Or potentially LexerError depending on exact error reporting
+      expect(
+        result1.hasErrors,
+        isTrue,
+      ); // Or potentially LexerError depending on exact error reporting
       // expect((result1.error as ParseError).message, contains("...")); // Specific message depends on where parser fails
 
       final result2 = parseAndCollectErrors('1..'); // Number followed by dot
       expect(result2.hasErrors, isTrue); // Expect parser error after number
       // expect((result2.error as ParseError).message, contains("..."));
 
-      final result3 = parseAndCollectErrors('.e5'); // Dot followed by identifier
+      final result3 = parseAndCollectErrors(
+        '.e5',
+      ); // Dot followed by identifier
       expect(result3.hasErrors, isTrue); // Expect parser error after dot
       // expect((result3.error as ParseError).message, contains("..."));
 
@@ -138,13 +143,16 @@ def add(a, b=1):
     });
 
     test('lambda syntax errors (reported by parser)', () {
-        final result1 = parseAndCollectErrors('lambda x'); // Missing colon
-        expect(result1.hasErrors, isTrue);
-        expect(result1.errors.first, contains("Expect ':' after lambda parameters"));
+      final result1 = parseAndCollectErrors('lambda x'); // Missing colon
+      expect(result1.hasErrors, isTrue);
+      expect(
+        result1.errors.first,
+        contains("Expect ':' after lambda parameters"),
+      );
 
-        final result2 = parseAndCollectErrors('lambda :'); // Missing expression
-        expect(result2.hasErrors, isTrue);
-        expect(result2.errors.first, contains("Expect expression"));
-     });
+      final result2 = parseAndCollectErrors('lambda :'); // Missing expression
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Expect expression"));
+    });
   });
 }

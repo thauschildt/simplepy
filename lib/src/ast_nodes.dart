@@ -20,42 +20,61 @@ abstract class Expr {
 abstract class ExprVisitor<R> {
   /// Visits an [AssignExpr] node (e.g., `name = value`).
   R visitAssignExpr(AssignExpr expr);
+
   /// Visits an [AugAssignExpr] node (e.g., `target += value`).
   R visitAugAssignExpr(AugAssignExpr expr);
+
   /// Visits a [BinaryExpr] node (e.g., `left + right`).
   R visitBinaryExpr(BinaryExpr expr);
+
   /// Visits a [CallExpr] node (e.g., `func(arg1, kwarg=arg2)`).
   R visitCallExpr(CallExpr expr);
+
   /// Visits a [IndexGetExpr] node (e.g., `object[index]`).
   R visitIndexGetExpr(IndexGetExpr expr);
+
   /// Visits a [IndexSetExpr] node (e.g., `object[index] = value`).
   R visitIndexSetExpr(IndexSetExpr expr);
+
   /// Visits a [AttributeGetExpr] node (e.g., `obj.attr`).
   R visitAttributeGetExpr(AttributeGetExpr expr);
+
   /// Visits a [AttributeSetExpr] node (e.g., `obj.attr = value`).
   R visitAttributeSetExpr(AttributeSetExpr expr);
+
   /// Visits a [GroupingExpr] node (e.g., `(expression)`).
   R visitGroupingExpr(GroupingExpr expr);
+
   /// Visits a [LiteralExpr] node (e.g., `123`, `"hello"`, `True`, `None`).
   R visitLiteralExpr(LiteralExpr expr);
+
   /// Visits a [ListLiteralExpr] node (e.g., `[elem1, elem2]`).
   R visitListLiteralExpr(ListLiteralExpr expr);
+
   /// Visits a [DictLiteralExpr] node (e.g., `{key1: val1, key2: val2}`).
   R visitDictLiteralExpr(DictLiteralExpr expr);
+
   /// Visits a [LogicalExpr] node (e.g., `left and right`, `left or right`).
   R visitLogicalExpr(LogicalExpr expr);
+
   /// Visits a [UnaryExpr] node (e.g., `-operand`, `not operand`).
   R visitUnaryExpr(UnaryExpr expr);
+
   /// Visits a [VariableExpr] node (e.g., `my_variable`).
   R visitVariableExpr(VariableExpr expr);
+
   /// Visits a [SuperExpr] node (e.g., in `super().__init__()`).
   R visitSuperExpr(SuperExpr expr);
+
   /// Visits a [LambdaExpr] node (e.g., `lambda x: x**2`).
   R visitLambdaExpr(LambdaExpr expr);
+
   /// Visits a [TupleLiteralExpr] node (e.g., `(1,'a')`).
   R visitTupleLiteralExpr(TupleLiteralExpr expr);
+
   /// Visits a [SetLiteralExpr] node (e.g., `{1,'a'}`).
   R visitSetLiteralExpr(SetLiteralExpr expr);
+
   /// Visits an f-string (e.g. f"{x}")
   R visitFStringExpr(FStringExpr expr);
 }
@@ -64,6 +83,7 @@ abstract class ExprVisitor<R> {
 class AssignExpr extends Expr {
   /// The token representing the variable name being assigned to.
   final Token name;
+
   /// The expression producing the value to be assigned.
   final Expr value;
   AssignExpr(this.name, this.value);
@@ -75,8 +95,10 @@ class AssignExpr extends Expr {
 class AugAssignExpr extends Expr {
   /// The target expression (L-value) being assigned to (e.g., [VariableExpr], [IndexGetExpr]).
   final Expr target;
+
   /// The token representing the augmented assignment operator (e.g., `+=`, `-=`).
   final Token operator;
+
   /// The expression producing the value used in the operation.
   final Expr value;
   AugAssignExpr(this.target, this.operator, this.value);
@@ -88,8 +110,10 @@ class AugAssignExpr extends Expr {
 class BinaryExpr extends Expr {
   /// The expression on the left side of the operator.
   final Expr left;
+
   /// The token representing the binary operator (e.g., `+`, `-`, `*`, `/`, `==`, `>`).
   final Token operator;
+
   /// The expression on the right side of the operator.
   final Expr right;
   BinaryExpr(this.left, this.operator, this.right);
@@ -111,6 +135,7 @@ class PositionalArgument extends Argument {
 class KeywordArgument extends Argument {
   /// The token representing the keyword identifier.
   final Token name;
+
   /// The expression providing the argument's value.
   final Expr value;
   KeywordArgument(this.name, this.value);
@@ -120,8 +145,10 @@ class KeywordArgument extends Argument {
 class CallExpr extends Expr {
   /// The expression being called (typically a [VariableExpr] or [IndexGetExpr]).
   final Expr callee;
+
   /// The token for the closing parenthesis `)`. Used for location information.
   final Token paren;
+
   /// The list of arguments passed to the function, structured as [Argument] subtypes.
   final List<Argument> arguments;
   CallExpr(this.callee, this.paren, this.arguments);
@@ -133,8 +160,10 @@ class CallExpr extends Expr {
 class IndexGetExpr extends Expr {
   /// The expression representing the object being indexed (e.g., list, dictionary, string).
   final Expr object;
+
   /// The token for the opening bracket `[`. Used for location information.
   final Token bracket;
+
   /// The expression providing the index or key.
   final Expr index;
   IndexGetExpr(this.object, this.bracket, this.index);
@@ -146,10 +175,13 @@ class IndexGetExpr extends Expr {
 class IndexSetExpr extends Expr {
   /// The expression representing the object whose item is being set (e.g., list, dictionary).
   final Expr object;
+
   /// The expression providing the index or key.
   final Expr index;
+
   /// The expression providing the value to be assigned.
   final Expr value;
+
   /// The token for the opening bracket `[`. Used for location information.
   final Token bracket;
   IndexSetExpr(this.object, this.index, this.value, this.bracket);
@@ -160,7 +192,7 @@ class IndexSetExpr extends Expr {
 /// Represents a dot expression to get an attribute from an object (e.g., `object.attribute`).
 class AttributeGetExpr extends Expr {
   final Expr object; // The object whose attribute is accessed
-  final Token name;  // The identifier token for the attribute name
+  final Token name; // The identifier token for the attribute name
   AttributeGetExpr(this.object, this.name);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeGetExpr(this);
@@ -169,8 +201,8 @@ class AttributeGetExpr extends Expr {
 /// Represents an item assignment expression using dot notation (e.g., `object.attribute = value`).
 class AttributeSetExpr extends Expr {
   final Expr object; // The object whose attribute is set
-  final Token name;  // The identifier token for the attribute name
-  final Expr value;  // The expression for the value to assign
+  final Token name; // The identifier token for the attribute name
+  final Expr value; // The expression for the value to assign
   AttributeSetExpr(this.object, this.name, this.value);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitAttributeSetExpr(this);
@@ -179,7 +211,7 @@ class AttributeSetExpr extends Expr {
 /// Represents the `super()` expression to refer to the superclass
 class SuperExpr extends Expr {
   final Token keyword; // The 'super' token
-  final Token method;  // The method name identifier after 'super.'
+  final Token method; // The method name identifier after 'super.'
   SuperExpr(this.keyword, this.method);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitSuperExpr(this);
@@ -199,6 +231,7 @@ class LambdaExpr extends Expr {
 class UnaryExpr extends Expr {
   /// The token representing the unary operator (e.g., `+`, `-`, `not`, `~`).
   final Token operator;
+
   /// The expression the operator applies to.
   final Expr operand;
   UnaryExpr(this.operator, this.operand);
@@ -237,6 +270,7 @@ class FStringLiteralPart extends FStringPart {
 class FStringExpressionPart extends FStringPart {
   /// AST node for the embedded expression.
   final Expr expression;
+
   /// Optional format specification string.
   final String? formatSpec;
   FStringExpressionPart(this.expression, this.formatSpec);
@@ -246,6 +280,7 @@ class FStringExpressionPart extends FStringPart {
 class FStringExpr extends Expr {
   /// The original f-string token (including f prefix and quotes) for location/error reporting.
   final Token token;
+
   /// List of parsed parts ([FStringLiteralPart] or [FStringExpressionPart]).
   final List<FStringPart> parts; // <- Geänderter Typ
   FStringExpr(this.token, this.parts);
@@ -257,6 +292,7 @@ class FStringExpr extends Expr {
 class TupleLiteralExpr extends Expr {
   /// The token for the opening parenthesis `(`. Used for location information.
   final Token paren;
+
   /// The list of expressions representing the elements of the tuple.
   final List<Expr> elements;
   TupleLiteralExpr(this.paren, this.elements);
@@ -267,8 +303,9 @@ class TupleLiteralExpr extends Expr {
 
 /// Represents a set literal expression (e.g., `{1, 'a', True}`).
 class SetLiteralExpr extends Expr {
-   /// The token for the opening brace `{`. Used for location information.
+  /// The token for the opening brace `{`. Used for location information.
   final Token brace;
+
   /// The list of expressions representing the elements of the set.
   final List<Expr> elements;
   SetLiteralExpr(this.brace, this.elements);
@@ -281,6 +318,7 @@ class SetLiteralExpr extends Expr {
 class ListLiteralExpr extends Expr {
   /// The token for the opening bracket `[`. Used for location information.
   final Token bracket;
+
   /// The list of expressions representing the elements of the list.
   final List<Expr> elements;
   ListLiteralExpr(this.bracket, this.elements);
@@ -292,8 +330,10 @@ class ListLiteralExpr extends Expr {
 class DictLiteralExpr extends Expr {
   /// The token for the opening brace `{`. Used for location information.
   final Token brace;
+
   /// The list of expressions representing the keys.
   final List<Expr> keys;
+
   /// The list of expressions representing the values, corresponding to [keys].
   final List<Expr> values;
   DictLiteralExpr(this.brace, this.keys, this.values);
@@ -305,8 +345,10 @@ class DictLiteralExpr extends Expr {
 class LogicalExpr extends Expr {
   /// The expression on the left side of the logical operator.
   final Expr left;
+
   /// The token representing the logical operator (`and` or `or`).
   final Token operator;
+
   /// The expression on the right side of the logical operator.
   final Expr right;
   LogicalExpr(this.left, this.operator, this.right);
@@ -344,24 +386,33 @@ abstract class Stmt {
 abstract class StmtVisitor<R> {
   /// Visits a [BlockStmt] node (sequence of statements).
   R visitBlockStmt(BlockStmt stmt);
+
   /// Visits an [ExpressionStmt] node (an expression used as a statement).
   R visitExpressionStmt(ExpressionStmt stmt);
+
   /// Visits a [FunctionStmt] node (`def` statement).
   R visitFunctionStmt(FunctionStmt stmt);
+
   /// Visits a [ClassStmt] node (`class` statement).
   R visitClassStmt(ClassStmt stmt); // <<
   /// Visits an [IfStmt] node (`if`/`elif`/`else` statement).
   R visitIfStmt(IfStmt stmt);
+
   /// Visits a [ReturnStmt] node (`return` statement).
   R visitReturnStmt(ReturnStmt stmt);
+
   /// Visits a [WhileStmt] node (`while` loop).
   R visitWhileStmt(WhileStmt stmt);
+
   /// Visits a [ForStmt] node (`for` loop).
   R visitForStmt(ForStmt stmt);
+
   /// Visits a [PassStmt] node (`pass` statement).
   R visitPassStmt(PassStmt stmt);
+
   /// Visits a [BreakStmt] node (`break` statement).
   R visitBreakStmt(BreakStmt stmt);
+
   /// Visits a [ContinueStmt] node (`continue` statement).
   R visitContinueStmt(ContinueStmt stmt);
 }
@@ -432,8 +483,10 @@ class StarStarKwargsParameter extends Parameter {
 class FunctionStmt extends Stmt {
   /// The token representing the function's identifier (name).
   final Token name;
+
   /// The list of parameters defined for the function, structured as [Parameter] subtypes.
   final List<Parameter> params;
+
   /// The list of statements forming the function's body.
   final List<Stmt> body;
   FunctionStmt(this.name, this.params, this.body);
@@ -454,10 +507,13 @@ class PassStmt extends Stmt {
 class IfStmt extends Stmt {
   /// The condition expression for the main `if` clause.
   final Expr condition;
+
   /// The statement (typically a [BlockStmt]) executed if [condition] is true.
   final Stmt thenBranch;
+
   /// The list of `elif` branches associated with this `if`.
   final List<ElifBranch> elifBranches;
+
   /// The optional statement (typically a [BlockStmt]) executed if all preceding
   /// `if` and `elif` conditions are false. Can be null.
   final Stmt? elseBranch;
@@ -470,6 +526,7 @@ class IfStmt extends Stmt {
 class ElifBranch {
   /// The condition expression for this `elif` clause.
   final Expr condition;
+
   /// The statement (typically a [BlockStmt]) executed if this [condition] is true
   /// and preceding `if`/`elif` conditions were false.
   final Stmt thenBranch;
@@ -480,6 +537,7 @@ class ElifBranch {
 class ReturnStmt extends Stmt {
   /// The `return` keyword token. Used for location information.
   final Token keyword;
+
   /// The optional expression whose value is returned. Can be null for `return` without a value.
   final Expr? value;
   ReturnStmt(this.keyword, this.value);
@@ -491,6 +549,7 @@ class ReturnStmt extends Stmt {
 class WhileStmt extends Stmt {
   /// The condition expression, evaluated before each iteration.
   final Expr condition;
+
   /// The statement (typically a [BlockStmt]) executed as the loop body.
   final Stmt body;
   WhileStmt(this.condition, this.body);
@@ -505,8 +564,10 @@ class WhileStmt extends Stmt {
 class ForStmt extends Stmt {
   /// The token representing the loop variable that takes on values from the iterable.
   final Token variable;
+
   /// The expression that evaluates to the iterable object (e.g., list, string, range result).
   final Expr iterable;
+
   /// The statement (typically a [BlockStmt]) executed as the loop body for each item.
   final Stmt body;
   ForStmt(this.variable, this.iterable, this.body);
@@ -570,33 +631,40 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     }
     return parenthesize("call ${printExpr(expr.callee)}", argStrings);
   }
+
   @override
   String visitIndexGetExpr(IndexGetExpr expr) =>
       parenthesize("get ${printExpr(expr.object)}", [expr.index]);
   @override
   String visitIndexSetExpr(IndexSetExpr expr) => parenthesize(
-    "set ${printExpr(expr.object)}[${printExpr(expr.index)}]", [expr.value]);
+    "set ${printExpr(expr.object)}[${printExpr(expr.index)}]",
+    [expr.value],
+  );
   @override
   String visitAttributeGetExpr(AttributeGetExpr expr) =>
       "(get_attr ${printExpr(expr.object)} . ${expr.name.lexeme})";
   @override
   String visitAttributeSetExpr(AttributeSetExpr expr) => parenthesize(
-    "set_attr ${printExpr(expr.object)} . ${expr.name.lexeme}", [expr.value]);
+    "set_attr ${printExpr(expr.object)} . ${expr.name.lexeme}",
+    [expr.value],
+  );
   @override
   String visitSuperExpr(SuperExpr expr) => "(super . ${expr.method.lexeme})";
   @override
   String visitClassStmt(ClassStmt stmt) {
-    var base = stmt.superclass != null ? " < ${printExpr(stmt.superclass!)}" : "";
+    var base =
+        stmt.superclass != null ? " < ${printExpr(stmt.superclass!)}" : "";
     var methodLines = stmt.methods.map((m) => printStmt(m)).join('\n    ');
     var indentedMethods = methodLines.isNotEmpty ? "    $methodLines" : "";
     return "class ${stmt.name.lexeme}$base:\n$indentedMethods\n";
   }
+
   @override
   String visitGroupingExpr(GroupingExpr expr) =>
       parenthesize("group", [expr.expression]);
   @override
   String visitLiteralExpr(LiteralExpr expr) => _stringifyLiteral(expr.value);
-   @override
+  @override
   String visitFStringExpr(FStringExpr expr) {
     List<String> partStrings = [];
     for (var part in expr.parts) {
@@ -610,6 +678,7 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     }
     return "(fstring ${partStrings.join(' + ')})"; // Simulate concatenation
   }
+
   @override
   String visitListLiteralExpr(ListLiteralExpr expr) =>
       parenthesize("list", expr.elements);
@@ -679,7 +748,9 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
       if (param is RequiredParameter) {
         paramStrings.add(param.name.lexeme);
       } else if (param is OptionalParameter) {
-        paramStrings.add("${param.name.lexeme}=${printExpr(param.defaultValue)}");
+        paramStrings.add(
+          "${param.name.lexeme}=${printExpr(param.defaultValue)}",
+        );
       } else if (param is StarArgsParameter) {
         paramStrings.add("*${param.name.lexeme}");
       } else if (param is StarStarKwargsParameter) {
@@ -737,7 +808,7 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     // Use dynamic for mixed Expr/Stmt/String
     var builder = StringBuffer();
     builder.write("($name");
-    for (var part in parts)   {
+    for (var part in parts) {
       builder.write(" ");
       if (part is Expr) {
         builder.write(part.accept(this));
@@ -762,7 +833,8 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
   /// Helper method to consistently format literal values in the output string.
   String _stringifyLiteral(Object? value) {
     if (value == null) return "None";
-    if (value is String) return "'${value.replaceAll("'", "\\'")}'"; // Show quotes for strings
+    if (value is String)
+      return "'${value.replaceAll("'", "\\'")}'"; // Show quotes for strings
     if (value is bool) return value ? "True" : "False";
     // Add other types if needed
     return value.toString();

@@ -5,8 +5,8 @@ final random = Random();
 
 // dart function to be executed when python "randint" is called
 int randint(List args, Map kwargs) {
-  int start=args[0], end=args[1];
-  return start+random.nextInt(end-start+1);
+  int start = args[0], end = args[1];
+  return start + random.nextInt(end - start + 1);
 }
 
 void main() {

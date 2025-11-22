@@ -34,7 +34,7 @@ void runPrompt() {
   String currentBlock = "";
 
   while (true) {
-      stdout.write(currentBlock.isEmpty ? '>>> ' : '... ');
+    stdout.write(currentBlock.isEmpty ? '>>> ' : '... ');
     String? line = stdin.readLineSync();
 
     // Handle Ctrl+D (EOF) or exit command
@@ -58,7 +58,7 @@ void runPrompt() {
 
         // no indentation?
         if (tempLexer.indentStack.length <= 1) {
-              runTheBlock = checkOpenBrackets(currentBlock) == 0;
+          runTheBlock = checkOpenBrackets(currentBlock) == 0;
         }
       } catch (e) {
         // Lexer error => try to run the code to show the error
@@ -93,7 +93,7 @@ void runPrompt() {
         }
       }
     }
-    
+
     if (runTheBlock) {
       run(currentBlock, isRepl: true);
       // reset for next input
@@ -124,7 +124,7 @@ int checkOpenBrackets(String block) {
         // Ignore nested braces in f-string (simplified)
         int braceLevel = 1;
         i++;
-        while(i < block.length && braceLevel > 0) {
+        while (i < block.length && braceLevel > 0) {
           if (block[i] == '{') braceLevel++;
           if (block[i] == '}') braceLevel--;
           i++;
@@ -145,11 +145,10 @@ int checkOpenBrackets(String block) {
       // ignore comment until end of line
       else if (char == '#') {
         while (i < block.length && block[i] != '\n') {
-            i++;
+          i++;
         }
         if (i < block.length) i--; // don't skip \n at end of line
-      }
-      else if (char == '(' || char == '[' || char == '{') {
+      } else if (char == '(' || char == '[' || char == '{') {
         balance++;
       } else if (char == ')' || char == ']' || char == '}') {
         balance--;
@@ -183,7 +182,7 @@ void run(String source, {required bool isRepl}) {
 
     // If parsing was successful, interpret the AST
     result = interpreter.interpret(statements);
-    if (result!=null) result = interpreter.repr(result);
+    if (result != null) result = interpreter.repr(result);
   } on LexerError catch (e) {
     print(e);
     hadError = true; // Mark static error
@@ -205,7 +204,7 @@ void run(String source, {required bool isRepl}) {
     }
     hadError = true; // Treat unexpected errors as critical failures
   }
-  if (result!=null) {
+  if (result != null) {
     print(result.toString());
   }
 }

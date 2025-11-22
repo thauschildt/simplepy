@@ -40,18 +40,17 @@ enum TokenType {
   SLASH_SLASH_EQUAL,
   STAR_STAR,
   SLASH_SLASH,
-  AMPERSAND,          // &
-  PIPE,               // |
-  CARET,              // ^
-  TILDE,              // ~
-  LEFT_SHIFT,         // <<
-  RIGHT_SHIFT,        // >>
-  AMPERSAND_EQUAL,    // &=
-  PIPE_EQUAL,         // |=
-  CARET_EQUAL,        // ^=
-  LEFT_SHIFT_EQUAL,   // <<=
-  RIGHT_SHIFT_EQUAL,  // >>=
-
+  AMPERSAND, // &
+  PIPE, // |
+  CARET, // ^
+  TILDE, // ~
+  LEFT_SHIFT, // <<
+  RIGHT_SHIFT, // >>
+  AMPERSAND_EQUAL, // &=
+  PIPE_EQUAL, // |=
+  CARET_EQUAL, // ^=
+  LEFT_SHIFT_EQUAL, // <<=
+  RIGHT_SHIFT_EQUAL, // >>=
   // Literals.
   IDENTIFIER,
   STRING,
@@ -78,7 +77,8 @@ enum TokenType {
   AND,
   OR,
   NOT,
-  CLASS, SUPER,
+  CLASS,
+  SUPER,
   LAMBDA,
   // Whitespace & Control
   INDENT,
@@ -203,17 +203,31 @@ class Lexer {
   /// It calls specific helper methods (like [string], [number], [identifier])
   /// or [addToken] directly for simpler tokens. It also handles comments and whitespace.
   void scanToken() {
-
     String c = advance();
     switch (c) {
-      case '(': addToken(TokenType.LEFT_PAREN); break;
-      case ')': addToken(TokenType.RIGHT_PAREN); break;
-      case '[': addToken(TokenType.LEFT_BRACKET); break;
-      case ']': addToken(TokenType.RIGHT_BRACKET); break;
-      case '{': addToken(TokenType.LEFT_BRACE); break;
-      case '}': addToken(TokenType.RIGHT_BRACE); break;
-      case ',': addToken(TokenType.COMMA); break;
-      case '.': if (isDigit(peek())) {
+      case '(':
+        addToken(TokenType.LEFT_PAREN);
+        break;
+      case ')':
+        addToken(TokenType.RIGHT_PAREN);
+        break;
+      case '[':
+        addToken(TokenType.LEFT_BRACKET);
+        break;
+      case ']':
+        addToken(TokenType.RIGHT_BRACKET);
+        break;
+      case '{':
+        addToken(TokenType.LEFT_BRACE);
+        break;
+      case '}':
+        addToken(TokenType.RIGHT_BRACE);
+        break;
+      case ',':
+        addToken(TokenType.COMMA);
+        break;
+      case '.':
+        if (isDigit(peek())) {
           current--; // Go back to the '.'
           number(); // number() will now see '.' at source[start]
         } else {
@@ -221,8 +235,12 @@ class Lexer {
           addToken(TokenType.DOT);
         }
         break;
-      case '-': addToken(match('=') ? TokenType.MINUS_EQUAL : TokenType.MINUS); break;
-      case '+': addToken(match('=') ? TokenType.PLUS_EQUAL : TokenType.PLUS); break;
+      case '-':
+        addToken(match('=') ? TokenType.MINUS_EQUAL : TokenType.MINUS);
+        break;
+      case '+':
+        addToken(match('=') ? TokenType.PLUS_EQUAL : TokenType.PLUS);
+        break;
       case '*':
         if (match('*')) {
           // Check for second '*'
@@ -266,25 +284,40 @@ class Lexer {
         break;
       case '<':
         if (match('<')) {
-          addToken(match('=') ? TokenType.LEFT_SHIFT_EQUAL : TokenType.LEFT_SHIFT); // << or <<=
-        } else { // < oder <=
+          addToken(
+            match('=') ? TokenType.LEFT_SHIFT_EQUAL : TokenType.LEFT_SHIFT,
+          ); // << or <<=
+        } else {
+          // < oder <=
           addToken(match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
         }
         break;
       case '>':
         if (match('>')) {
-          addToken(match('=') ? TokenType.RIGHT_SHIFT_EQUAL : TokenType.RIGHT_SHIFT); // >> or >>=
+          addToken(
+            match('=') ? TokenType.RIGHT_SHIFT_EQUAL : TokenType.RIGHT_SHIFT,
+          ); // >> or >>=
         } else {
           addToken(match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
         }
         break;
-      case '&': addToken(match('=') ? TokenType.AMPERSAND_EQUAL : TokenType.AMPERSAND); break;
-      case '|': addToken(match('=') ? TokenType.PIPE_EQUAL : TokenType.PIPE); break;
-      case '^': addToken(match('=') ? TokenType.CARET_EQUAL : TokenType.CARET); break;
-      case '~': addToken(TokenType.TILDE); break;
-      
+      case '&':
+        addToken(match('=') ? TokenType.AMPERSAND_EQUAL : TokenType.AMPERSAND);
+        break;
+      case '|':
+        addToken(match('=') ? TokenType.PIPE_EQUAL : TokenType.PIPE);
+        break;
+      case '^':
+        addToken(match('=') ? TokenType.CARET_EQUAL : TokenType.CARET);
+        break;
+      case '~':
+        addToken(TokenType.TILDE);
+        break;
+
       case '#': // Comment
-        while (peek() != '\n' && !isAtEnd()) { advance(); }
+        while (peek() != '\n' && !isAtEnd()) {
+          advance();
+        }
         // Don't add a token for comments, but handle potential newline/indentation
         // Check if the comment was the only thing on the line before triggering indentation handling
         if (current == start + 1 &&
@@ -332,7 +365,11 @@ class Lexer {
           current--; // Backtrack for identifier()
           identifier();
         } else {
-          throw LexerError(line, currentColumn() - 1, "Unexpected character: '$c'");
+          throw LexerError(
+            line,
+            currentColumn() - 1,
+            "Unexpected character: '$c'",
+          );
         }
         break;
     }
@@ -386,7 +423,9 @@ class Lexer {
       // Skip remaining whitespace/comment on the line
       while (peek() != '\n' && !isAtEnd()) {
         if (peek() == '#') {
-          while (peek() != '\n' && !isAtEnd()) { advance(); }
+          while (peek() != '\n' && !isAtEnd()) {
+            advance();
+          }
           break; // Exit inner comment loop once newline or EOF is hit
         } else if (peek() == ' ' || peek() == '\t' || peek() == '\r') {
           advance();
@@ -466,7 +505,9 @@ class Lexer {
   /// If the scanned identifier matches a reserved word in [keywords], the corresponding
   /// keyword [TokenType] is used; otherwise, [TokenType.IDENTIFIER] is used.
   void identifier() {
-    while (isAlphaNumeric(peek())) { advance(); }
+    while (isAlphaNumeric(peek())) {
+      advance();
+    }
     String text = source.substring(start, current);
     TokenType type = keywords[text] ?? TokenType.IDENTIFIER;
     addToken(type);
@@ -514,14 +555,19 @@ class Lexer {
     //    This runs if we didn't start with a dot AND a dot follows the integer part,
     //    OR if we *did* start with a dot (because we need to consume the digits after it).
     if (peek() == '.') {
-        if (startsWithDot) {
-            // We already consumed the starting dot. This would be a second dot.
-            throw LexerError(line, currentColumn(), "Invalid syntax: multiple decimal points in number.");
-        }
-        isFloat = true;
-        advance(); // Consume '.'
+      if (startsWithDot) {
+        // We already consumed the starting dot. This would be a second dot.
+        throw LexerError(
+          line,
+          currentColumn(),
+          "Invalid syntax: multiple decimal points in number.",
+        );
+      }
+      isFloat = true;
+      advance(); // Consume '.'
     }
-    if (isFloat) { // Consume digits if it's a float (either startsWithDot or dotSeenAfterInteger)
+    if (isFloat) {
+      // Consume digits if it's a float (either startsWithDot or dotSeenAfterInteger)
       int fractionStart = current;
       while (isDigit(peek())) {
         advance();
@@ -530,9 +576,15 @@ class Lexer {
         hasFractionalDigits = true;
       }
       // If startsWithDot is true, we MUST have found some fractional digits OR an exponent later
-      if (startsWithDot && !hasFractionalDigits && peek().toLowerCase() != 'e') {
+      if (startsWithDot &&
+          !hasFractionalDigits &&
+          peek().toLowerCase() != 'e') {
         // Example: "." followed by non-digit, non-'e'
-        throw LexerError(line, start - lineStart + 1, "Invalid number format: lone decimal point.");
+        throw LexerError(
+          line,
+          start - lineStart + 1,
+          "Invalid number format: lone decimal point.",
+        );
       }
     }
 
@@ -541,20 +593,31 @@ class Lexer {
       // Ensure something came before 'e'
       if (current == start || (startsWithDot && !hasFractionalDigits)) {
         // Handles cases like "e5" or ".e5"
-        throw LexerError(line, start - lineStart + 1,
-          "Invalid number format: exponent must follow digits or decimal point with digits.");
+        throw LexerError(
+          line,
+          start - lineStart + 1,
+          "Invalid number format: exponent must follow digits or decimal point with digits.",
+        );
       }
       isFloat = true;
       hasExponent = true;
       advance(); // Consume 'e' or 'E'
-      if (peek() == '+' || peek() == '-') { advance(); } // Optional sign
+      if (peek() == '+' || peek() == '-') {
+        advance();
+      } // Optional sign
       int exponentStart = current;
-      while (isDigit(peek())) { advance(); }
+      while (isDigit(peek())) {
+        advance();
+      }
       if (current == exponentStart) {
-        throw LexerError(line, currentColumn(), "Invalid scientific notation: exponent lacks digits.");
+        throw LexerError(
+          line,
+          currentColumn(),
+          "Invalid scientific notation: exponent lacks digits.",
+        );
       }
     }
-    
+
     // --- Parse and validate the Literal Value ---
     String numberString = source.substring(start, current);
 
@@ -581,7 +644,11 @@ class Lexer {
       }
     } catch (e) {
       String formatType = isFloat ? "floating-point" : "integer";
-      throw LexerError(line, start - lineStart + 1, "Invalid $formatType number format: '$numberString'");
+      throw LexerError(
+        line,
+        start - lineStart + 1,
+        "Invalid $formatType number format: '$numberString'",
+      );
     }
     addToken(TokenType.NUMBER, literalValue);
   }
@@ -614,9 +681,12 @@ class Lexer {
         break;
       default:
         // This should not be reachable due to checks in number()
-        throw StateError('Internal error: Invalid prefix "$prefix" passed to _scanPrefixedInteger.');
+        throw StateError(
+          'Internal error: Invalid prefix "$prefix" passed to _scanPrefixedInteger.',
+        );
     }
-    int digitStart = current; // Position after the prefix character (e.g., after 'x')
+    int digitStart =
+        current; // Position after the prefix character (e.g., after 'x')
     // Consume all valid digits for the given base
     while (isValidDigit(peek())) {
       advance();
@@ -625,8 +695,11 @@ class Lexer {
     // Check if any digits were actually found after the prefix
     if (current == digitStart) {
       // Error: Prefix not followed by any digits (e.g., "0x", "0b")
-      throw LexerError(line, start - lineStart + 1, // Error starts at '0'
-          "Invalid $baseName literal: Missing digits after '0$prefix'.");
+      throw LexerError(
+        line,
+        start - lineStart + 1, // Error starts at '0'
+        "Invalid $baseName literal: Missing digits after '0$prefix'.",
+      );
     }
 
     // Extract the substring containing only the digits (after the prefix)
@@ -675,10 +748,10 @@ class Lexer {
   }
 
   /// Scans an f-string literal. Finds closing quote, handles basic escapes, but preserves content.
-  void fstring(String quoteType) {  
+  void fstring(String quoteType) {
     int startLine = line;
     // Start column should be the 'f', which is source[start-2]
-    int startCol = (start -0) - lineStart + 1;
+    int startCol = (start - 0) - lineStart + 1;
     // current position is already AFTER the opening quote here
     while (peek() != quoteType && !isAtEnd()) {
       // Handle escapes within f-string, they affect finding the end quote
@@ -703,7 +776,9 @@ class Lexer {
     // Lexeme includes f prefix and quotes for context
     String lexeme = source.substring(start, current); // Include 'f' prefix
     // Literal value is the raw content for the parser
-    tokens.add(Token(TokenType.F_STRING, lexeme, rawContent, startLine, startCol));
+    tokens.add(
+      Token(TokenType.F_STRING, lexeme, rawContent, startLine, startCol),
+    );
   }
 
   // Helper to process basic string escapes (can be used by string() and by fstring())
@@ -759,7 +834,7 @@ class Lexer {
 
   /// Checks if character [c] is a binary digit (0 or 1).
   bool isBinaryDigit(String c) {
-     return c == '0' || c == '1';
+    return c == '0' || c == '1';
   }
 
   /// Checks if character [c] is an octal digit (0-7).
@@ -772,8 +847,8 @@ class Lexer {
   bool isHexDigit(String c) {
     if (c.isEmpty) return false;
     return isDigit(c) ||
-           (c.compareTo('a') >= 0 && c.compareTo('f') <= 0) ||
-           (c.compareTo('A') >= 0 && c.compareTo('F') <= 0);
+        (c.compareTo('a') >= 0 && c.compareTo('f') <= 0) ||
+        (c.compareTo('A') >= 0 && c.compareTo('F') <= 0);
   }
 
   /// Returns true if the lexer has reached the end of the [source] string.
@@ -802,7 +877,7 @@ class Lexer {
 ///
 /// It includes the [line] number, [column] number, and a descriptive [message]
 /// indicating the nature of the error.
-/// 
+///
 class LexerError implements Exception {
   final int line;
   final int column;

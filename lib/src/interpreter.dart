@@ -7,6 +7,7 @@ import 'native_methods.dart' as native_methods;
 // Global flags indicating error states, potentially used by REPL.
 /// Flag indicating if a static error (Lexer or Parser) occurred.
 bool hadError = false;
+
 /// Flag indicating if a runtime error occurred during interpretation.
 bool hadRuntimeError = false;
 
@@ -55,7 +56,8 @@ abstract class PyCallable {
   );
 }
 
-class PyList { // Wrapper for Python-Lists
+class PyList {
+  // Wrapper for Python-Lists
   final List<Object?> list;
   PyList(this.list);
   @override
@@ -63,7 +65,8 @@ class PyList { // Wrapper for Python-Lists
   int get length => list.length;
 }
 
-class PyTuple { // Wrapper for Python-Tuples
+class PyTuple {
+  // Wrapper for Python-Tuples
   final List<Object?> tuple; // Internally a list
   PyTuple(this.tuple);
   @override
@@ -74,7 +77,8 @@ class PyTuple { // Wrapper for Python-Tuples
     if (other is PyTuple) {
       if (tuple.length != other.tuple.length) return false;
       for (int i = 0; i < tuple.length; i++) {
-        if (!Interpreter.internalIsEqual(tuple[i], other.tuple[i])) return false;
+        if (!Interpreter.internalIsEqual(tuple[i], other.tuple[i]))
+          return false;
       }
       return true;
     }
@@ -86,9 +90,13 @@ class PyTuple { // Wrapper for Python-Tuples
 }
 
 /// Signatue of native methods
-typedef PyCallableNativeImpl = Object? Function(
-  Interpreter interpreter, Object receiver, List<Object?> positionalArgs, Map<String, Object?> keywordArgs
-);  
+typedef PyCallableNativeImpl =
+    Object? Function(
+      Interpreter interpreter,
+      Object receiver,
+      List<Object?> positionalArgs,
+      Map<String, Object?> keywordArgs,
+    );
 
 /// Represents a built-in method bound to a specific native Dart object (like a List or String).
 ///
@@ -97,8 +105,10 @@ typedef PyCallableNativeImpl = Object? Function(
 class PyBoundNativeMethod extends PyCallable {
   /// The native Dart object instance this method is bound to (e.g., the List).
   final Object receiver;
+
   /// The actual implementation function for this native method.
   final PyCallableNativeImpl implementation;
+
   /// The name of the method (e.g., "append"), used for error messages and toString.
   final String methodName;
 
@@ -110,7 +120,11 @@ class PyBoundNativeMethod extends PyCallable {
   /// arguments from the Python call site to the specialized implementation function
   /// (like `_listAppend`, `_listInsert`, etc.).
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  Object? call(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
     try {
       // Delegate to the specific static implementation function stored
       return implementation(interpreter, receiver, positionalArgs, keywordArgs);
@@ -119,11 +133,16 @@ class PyBoundNativeMethod extends PyCallable {
     } catch (e) {
       // Wrap other potential errors from the implementation
       Token errorToken = Token(TokenType.IDENTIFIER, methodName, null, 0, 0);
-      throw RuntimeError(errorToken, "Error executing native method '$methodName': $e");
+      throw RuntimeError(
+        errorToken,
+        "Error executing native method '$methodName': $e",
+      );
     }
   }
+
   @override
-  String toString() => "<built-in method $methodName of ${receiver.runtimeType}>";
+  String toString() =>
+      "<built-in method $methodName of ${receiver.runtimeType}>";
 }
 
 /// Represents a class definition at runtime.
@@ -148,20 +167,28 @@ class PyClass extends PyCallable {
 
   /// Called when the class itself is called (e.g., `MyClass()`). Creates an instance.
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  Object? call(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
     PyInstance instance = PyInstance(this); // Create the instance
     // Look for and call the initializer (__init__)
     PyFunction? initializer = findMethod("__init__");
     if (initializer != null) {
       // Bind the initializer to the instance and call it
       initializer.bind(instance).call(interpreter, positionalArgs, keywordArgs);
-    } else if (positionalArgs.isNotEmpty || keywordArgs.isNotEmpty){
+    } else if (positionalArgs.isNotEmpty || keywordArgs.isNotEmpty) {
       // No __init__, but arguments were passed to the class constructor
       Token classToken = Token(TokenType.IDENTIFIER, name, null, 0, 0);
-      throw RuntimeError(classToken, "TypeError: object constructor takes no arguments");
+      throw RuntimeError(
+        classToken,
+        "TypeError: object constructor takes no arguments",
+      );
     }
     return instance; // Return the new instance
   }
+
   @override
   String toString() => "<class '$name'>";
 }
@@ -171,6 +198,7 @@ class PyInstance {
   final PyClass klass; // The class this instance belongs to
   final Map<String, Object?> fields = {}; // Instance attributes
   PyInstance(this.klass);
+
   /// Gets an attribute or method from the instance.
   Object? get(Token name) {
     // 1. Check instance fields first
@@ -183,12 +211,17 @@ class PyInstance {
       return method.bind(this); // Return a bound method
     }
     // 3. Not found
-    throw RuntimeError(name, "AttributeError: '${klass.name}' object has no attribute '${name.lexeme}'");
+    throw RuntimeError(
+      name,
+      "AttributeError: '${klass.name}' object has no attribute '${name.lexeme}'",
+    );
   }
+
   /// Sets an attribute on the instance.
   void set(Token name, Object? value) {
     fields[name.lexeme] = value;
   }
+
   @override
   String toString() => "<${klass.name} object>"; // Basic representation
 }
@@ -196,17 +229,28 @@ class PyInstance {
 /// Represents a method that has been bound to a specific instance (`self`).
 class PyBoundMethod extends PyCallable {
   final PyInstance receiver; // The instance ('self')
-  final PyFunction method;   // The original PyFunction (method definition)
+  final PyFunction method; // The original PyFunction (method definition)
   PyBoundMethod(this.receiver, this.method);
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  Object? call(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
     // When calling a bound method, the interpreter needs to execute the
     // original function's code within an environment where 'self' is defined.
     // We pass the receiver (self) to the method's call implementation.
-    return method.call(interpreter, positionalArgs, keywordArgs, receiver: receiver);
+    return method.call(
+      interpreter,
+      positionalArgs,
+      keywordArgs,
+      receiver: receiver,
+    );
   }
+
   @override
-  String toString() => "<bound method ${method.declaration?.name.lexeme} of ${receiver.toString()}>";
+  String toString() =>
+      "<bound method ${method.declaration?.name.lexeme} of ${receiver.toString()}>";
 }
 
 /// Represents a user-defined function declared using the `def` keyword
@@ -218,39 +262,47 @@ class PyBoundMethod extends PyCallable {
 class PyFunction extends PyCallable {
   /// The AST node representing the function definition (`def name(...) ...`).
   final FunctionStmt? declaration;
+
   /// expression in case of lambda function
   final Expr? expressionBody;
+
   /// parameters of function declaration or lambda function
   final List<Parameter> params;
-  
+
   /// The environment that was active when the function was defined.
   /// This enables lexical scoping (closures).
   final Environment closure;
 
   /// Flag indicating if this function is an initializer (e.g., `__init__` if classes were supported).
-  final bool isInitializer; // Currently unused but kept for potential class extension
+  final bool
+  isInitializer; // Currently unused but kept for potential class extension
 
   /// Constructor for DEF function
-  PyFunction.fromDef(FunctionStmt this.declaration, this.closure, {this.isInitializer = false})
-    : expressionBody = null, // expressionBody is null for DEF
-      params = declaration.params;
+  PyFunction.fromDef(
+    FunctionStmt this.declaration,
+    this.closure, {
+    this.isInitializer = false,
+  }) : expressionBody = null, // expressionBody is null for DEF
+       params = declaration.params;
 
   // Constructor for LAMBDA function
   PyFunction.fromLambda(LambdaExpr lambdaExpr, this.closure)
     : declaration = null, // declaration is null for LAMBDA
       expressionBody = lambdaExpr.body,
       params = lambdaExpr.params,
-      isInitializer = false
-  {
+      isInitializer = false {
     // Make sure that the body is an Expr but not assignment.
     // In case of an assignment, a SyntaxError should be thrown by the Parser,
     // but it is easier to detect it here.
     if (expressionBody is AssignExpr ||
-      expressionBody is AugAssignExpr ||
-      expressionBody is IndexSetExpr ||
-      expressionBody is AttributeSetExpr) {
+        expressionBody is AugAssignExpr ||
+        expressionBody is IndexSetExpr ||
+        expressionBody is AttributeSetExpr) {
       Token errorToken = lambdaExpr.keyword;
-      throw RuntimeError(errorToken, "SyntaxError: invalid syntax (assignment in lambda)");
+      throw RuntimeError(
+        errorToken,
+        "SyntaxError: invalid syntax (assignment in lambda)",
+      );
     }
   }
 
@@ -271,14 +323,22 @@ class PyFunction extends PyCallable {
   /// Handles `return` statements via [ReturnValue] exceptions and implicit `None` returns.
   /// Throws [RuntimeError] for argument mismatches (wrong number, type, unexpected keywords).
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs, {PyInstance? receiver}) {
+  Object? call(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs, {
+    PyInstance? receiver,
+  }) {
     Environment environment = Environment(closure);
     // --- Bind 'self' if this is a method call ---
     String? selfParamName;
     int parameterOffset = 0; // How many parameters to skip (0 or 1 for self)
     if (receiver != null) {
-      if (params.isEmpty && declaration!=null) {
-        throw RuntimeError(declaration!.name, "TypeError: Method '${declaration!.name.lexeme}' called on instance but has no parameters (missing 'self'?)");
+      if (params.isEmpty && declaration != null) {
+        throw RuntimeError(
+          declaration!.name,
+          "TypeError: Method '${declaration!.name.lexeme}' called on instance but has no parameters (missing 'self'?)",
+        );
       }
       selfParamName = params[0].name.lexeme;
       environment.define(selfParamName, receiver);
@@ -286,8 +346,10 @@ class PyFunction extends PyCallable {
     }
     // --- Argument to Parameter Binding ---
     int positionalArgIndex = 0;
-    Set<String> usedKeywordArgs = {}; // Track keywords used to detect unexpected ones
-    Set<String> assignedParams = {}; // Track params assigned to prevent duplicates
+    Set<String> usedKeywordArgs =
+        {}; // Track keywords used to detect unexpected ones
+    Set<String> assignedParams =
+        {}; // Track params assigned to prevent duplicates
     StarArgsParameter? starArgsParam;
     StarStarKwargsParameter? starStarKwargsParam;
     List collectedStarArgs = [];
@@ -302,7 +364,10 @@ class PyFunction extends PyCallable {
         if (positionalArgIndex < positionalArgs.length) {
           // Argum  ent provided positionally
           if (keywordArgs.containsKey(name)) {
-            throw RuntimeError(param.name, "Argument '$name' given both positionally and as keyword.");
+            throw RuntimeError(
+              param.name,
+              "Argument '$name' given both positionally and as keyword.",
+            );
           }
           environment.define(name, positionalArgs[positionalArgIndex]);
           assignedParams.add(name);
@@ -314,8 +379,10 @@ class PyFunction extends PyCallable {
           usedKeywordArgs.add(name); // Mark keyword as used
         } else {
           // Argument not provided
-          throw RuntimeError(declaration?.name ?? (expressionBody! as LambdaExpr).keyword,
-            "Missing required argument: '$name'.");
+          throw RuntimeError(
+            declaration?.name ?? (expressionBody! as LambdaExpr).keyword,
+            "Missing required argument: '$name'.",
+          );
         }
       } else if (param is OptionalParameter) {
         if (positionalArgIndex < positionalArgs.length) {
@@ -356,7 +423,8 @@ class PyFunction extends PyCallable {
       } else if (param is StarArgsParameter) {
         starArgsParam = param; // Store to collect remaining positionals later
       } else if (param is StarStarKwargsParameter) {
-        starStarKwargsParam = param; // Store to collect remaining keywords later
+        starStarKwargsParam =
+            param; // Store to collect remaining keywords later
       }
     } // End parameter definition loop
 
@@ -375,7 +443,8 @@ class PyFunction extends PyCallable {
       // If there's no *args parameter, check for excess positional arguments
       if (positionalArgIndex < positionalArgs.length) {
         // Calculate expected number of positional params (req + opt)
-        int maxPositional = params
+        int maxPositional =
+            params
                 .where((p) => p is RequiredParameter || p is OptionalParameter)
                 .length;
         throw RuntimeError(
@@ -403,9 +472,7 @@ class PyFunction extends PyCallable {
       for (var key in keywordArgs.keys) {
         if (!usedKeywordArgs.contains(key)) {
           // Check if a parameter with this name exists at all
-          bool paramExists = params.any(
-            (p) => p.name.lexeme == key,
-          );
+          bool paramExists = params.any((p) => p.name.lexeme == key);
           if (paramExists) {
             // This case *shouldn't* happen if logic above is correct
             // (means keyword arg matched param name but wasn't used)
@@ -424,30 +491,33 @@ class PyFunction extends PyCallable {
       }
     }
 
-    if (expressionBody != null) { // execute lambda body
+    if (expressionBody != null) {
+      // execute lambda body
       try {
         return interpreter.evaluateInEnvironment(expressionBody!, environment);
       } catch (e) {
         Token errorToken = Token(TokenType.LAMBDA, 'lambda', null, 0, 0);
         throw RuntimeError(errorToken, "Error during lambda execution: $e");
       }
-    } else if (declaration != null) { // execute (def-) function
+    } else if (declaration != null) {
+      // execute (def-) function
       try {
-          interpreter.executeBlock(declaration!.body, environment);
+        interpreter.executeBlock(declaration!.body, environment);
       } on ReturnValue catch (returnValue) {
-          return isInitializer ? null : returnValue.value;
+        return isInitializer ? null : returnValue.value;
       }
       return null;
     } else {
       // should not happen
-      throw StateError("PyFunction has neither declaration nor expression body.");
+      throw StateError(
+        "PyFunction has neither declaration nor expression body.",
+      );
     }
   }
 
   @override
-  String toString() => declaration != null
-    ? '<fn ${declaration!.name.lexeme}>'
-    : "<lambda>";
+  String toString() =>
+      declaration != null ? '<fn ${declaration!.name.lexeme}>' : "<lambda>";
 }
 
 /// Wraps a native Dart function, making it callable from the interpreted language.
@@ -469,7 +539,11 @@ class NativeFunction extends PyCallable {
   /// underlying [_function]. Catches potential exceptions thrown by the Dart function
   /// and wraps them in a [RuntimeError] if they are not already one.
   @override
-  Object? call(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  Object? call(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
     // Native functions now need to handle positional and keyword args themselves.
     try {
       // Directly call the wrapped Dart function, passing the structures
@@ -555,8 +629,11 @@ class Environment {
 
 // Internal exceptions for loop control flow.
 class _BreakException implements Exception {}
+
 final _breakException = _BreakException(); // Singleton instance
+
 class _ContinueException implements Exception {}
+
 final _continueException = _ContinueException(); // Singleton instance
 
 /// Executes the Abstract Syntax Tree (AST) representing the script.
@@ -589,7 +666,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Initializes the global environment and defines built-in functions like `print` and `range`.
   Interpreter() {
     _environment = globals; // Start in global scope
-    
+
     // Register all built-in functions
     _registerBuiltin("print", NativeFunction(_printBuiltin));
     _registerBuiltin("range", NativeFunction(_rangeBuiltin));
@@ -618,16 +695,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   void registerFunction(String name, Function(List args, Map kwargs) function) {
-    globals.define(name, NativeFunction((interp, args, kwargs) => function(args, kwargs)));
+    globals.define(
+      name,
+      NativeFunction((interp, args, kwargs) => function(args, kwargs)),
+    );
   }
 
   /// Default print implementation writing to stdout, handling partial lines.
   void _printWithBuffer(String s) {
-    int n=s.lastIndexOf("\n");
+    int n = s.lastIndexOf("\n");
     String first = "";
-    if (n>=0) {
+    if (n >= 0) {
       first = s.substring(0, n);
-      String last = s.substring(n+1);
+      String last = s.substring(n + 1);
       _outbuf.clear();
       _outbuf.write(last);
     }
@@ -636,20 +716,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Helper to get a predictable type name string used by type() and error messages.
   static String getTypeString(Object? obj) {
-     if (obj == null) return 'NoneType';
-     if (obj is bool) return 'bool';
-     if (obj is int) return 'int';
-     if (obj is double) return 'float';
-     if (obj is String) return 'str';
-     if (obj is PyList) return 'list';
-     if (obj is Map) return 'dict';
-     if (obj is PyTuple) return 'tuple';
-     if (obj is Set) return 'set';
-     if (obj is PyFunction) return 'function';
-     if (obj is NativeFunction) return 'builtin_function_or_method';
-     if (obj is PyInstance) return obj.klass.name;
-     if (obj is PyClass) return 'type';
-     return 'object'; // Default fallback
+    if (obj == null) return 'NoneType';
+    if (obj is bool) return 'bool';
+    if (obj is int) return 'int';
+    if (obj is double) return 'float';
+    if (obj is String) return 'str';
+    if (obj is PyList) return 'list';
+    if (obj is Map) return 'dict';
+    if (obj is PyTuple) return 'tuple';
+    if (obj is Set) return 'set';
+    if (obj is PyFunction) return 'function';
+    if (obj is NativeFunction) return 'builtin_function_or_method';
+    if (obj is PyInstance) return obj.klass.name;
+    if (obj is PyClass) return 'type';
+    return 'object'; // Default fallback
   }
 
   // --- Built-in Function Implementations ---
@@ -696,7 +776,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   /// Native implementation of the `range()` function.
   /// Handles 1, 2, or 3 integer arguments to generate a list of numbers.
-  static Object? _rangeBuiltin(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
+  static Object? _rangeBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
     if (keywordArgs.isNotEmpty) {
       throw RuntimeError(
         Token(TokenType.RANGE, 'range', null, 0, 0),
@@ -760,7 +844,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     List<Object?> positionalArgs,
     Map<String, Object?> keywordArgs,
   ) {
-    native_methods.checkNumArgs('len', positionalArgs, keywordArgs, required: 1);
+    native_methods.checkNumArgs(
+      'len',
+      positionalArgs,
+      keywordArgs,
+      required: 1,
+    );
     final arg = positionalArgs[0];
     if (arg is String) return arg.length;
     if (arg is PyList) return arg.list.length;
@@ -768,7 +857,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (arg is Map) return arg.length;
     if (arg is Set) return arg.length;
 
-    throw RuntimeError(builtInToken('len'),
+    throw RuntimeError(
+      builtInToken('len'),
       "TypeError: object of type '${Interpreter.getTypeString(arg)}' has no len()",
     );
   }
@@ -780,7 +870,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNumArgs('str', positionalArgs, keywordArgs, maxOptional: 1);
-    return positionalArgs.isEmpty ? "" : interpreter.stringify(positionalArgs[0]);
+    return positionalArgs.isEmpty
+        ? ""
+        : interpreter.stringify(positionalArgs[0]);
   }
 
   /// Implementation of `int(x=0, base=10)`
@@ -799,10 +891,21 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (baseArg is int) {
         base = baseArg;
       } else {
-        throw RuntimeError(builtInToken('int'), "TypeError: 'base' argument must be an integer");
+        throw RuntimeError(
+          builtInToken('int'),
+          "TypeError: 'base' argument must be an integer",
+        );
       }
-      if (value is! String) throw RuntimeError(builtInToken('int'), "TypeError: int() can't convert non-string with explicit base");
-      if (base != 0 && (base < 2 || base > 36)) throw RuntimeError(builtInToken('int'), "ValueError: int() base must be >= 2 and <= 36, or 0");
+      if (value is! String)
+        throw RuntimeError(
+          builtInToken('int'),
+          "TypeError: int() can't convert non-string with explicit base",
+        );
+      if (base != 0 && (base < 2 || base > 36))
+        throw RuntimeError(
+          builtInToken('int'),
+          "ValueError: int() base must be >= 2 and <= 36, or 0",
+        );
     }
 
     if (value is int && base == 10) return value; // Common case optimization
@@ -814,37 +917,58 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       int effectiveBase = base;
       String? prefix;
 
-      if (strValue.startsWith('0x') || strValue.startsWith('0X')) { prefix = '0x'; effectiveBase = 16; }
-      else if (strValue.startsWith('0b') || strValue.startsWith('0B')) { prefix = '0b'; effectiveBase = 2; }
-      else if (strValue.startsWith('0o') || strValue.startsWith('0O')) { prefix = '0o'; effectiveBase = 8; }
+      if (strValue.startsWith('0x') || strValue.startsWith('0X')) {
+        prefix = '0x';
+        effectiveBase = 16;
+      } else if (strValue.startsWith('0b') || strValue.startsWith('0B')) {
+        prefix = '0b';
+        effectiveBase = 2;
+      } else if (strValue.startsWith('0o') || strValue.startsWith('0O')) {
+        prefix = '0o';
+        effectiveBase = 8;
+      }
 
-      if (base == 0) { // Auto-detect base only if base=0
-          if (prefix == null) {
-            effectiveBase = 10;
-          } else {
-            strValue = strValue.substring(2);
-          }
-      } else if (prefix != null && base == effectiveBase) {
-          // Allow explicit base matching prefix, remove prefix
+      if (base == 0) {
+        // Auto-detect base only if base=0
+        if (prefix == null) {
+          effectiveBase = 10;
+        } else {
           strValue = strValue.substring(2);
+        }
+      } else if (prefix != null && base == effectiveBase) {
+        // Allow explicit base matching prefix, remove prefix
+        strValue = strValue.substring(2);
       } else if (prefix != null && base != effectiveBase) {
-          // Mismatch: e.g., int('0x10', base=10) is an error in Python
-          throw RuntimeError(builtInToken('int'), "ValueError: invalid literal for int() with base $base: '$value'");
+        // Mismatch: e.g., int('0x10', base=10) is an error in Python
+        throw RuntimeError(
+          builtInToken('int'),
+          "ValueError: invalid literal for int() with base $base: '$value'",
+        );
       }
       // If base was specified (and not 0) and there's no prefix, use the specified base directly.
 
-      if (strValue.isEmpty && prefix != null) { // Handles "0x", "0b", "0o"
-         throw RuntimeError(builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
+      if (strValue.isEmpty && prefix != null) {
+        // Handles "0x", "0b", "0o"
+        throw RuntimeError(
+          builtInToken('int'),
+          "ValueError: invalid literal for int() with base $effectiveBase: '$value'",
+        );
       }
 
       int? parsedInt = int.tryParse(strValue, radix: effectiveBase);
       if (parsedInt == null) {
-        throw RuntimeError(builtInToken('int'), "ValueError: invalid literal for int() with base $effectiveBase: '$value'");
+        throw RuntimeError(
+          builtInToken('int'),
+          "ValueError: invalid literal for int() with base $effectiveBase: '$value'",
+        );
       }
       return parsedInt;
     }
 
-    throw RuntimeError(builtInToken('int'), "TypeError: int() argument must be a string, a bytes-like object or a number, not '${Interpreter.getTypeString(value)}'");
+    throw RuntimeError(
+      builtInToken('int'),
+      "TypeError: int() argument must be a string, a bytes-like object or a number, not '${Interpreter.getTypeString(value)}'",
+    );
   }
 
   /// Implementation of `float(x=0.0)`
@@ -869,10 +993,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (parsedFloat != null) {
         return parsedFloat;
       } else {
-        throw RuntimeError(builtInToken('float'), "ValueError: could not convert string to float: '$value'");
+        throw RuntimeError(
+          builtInToken('float'),
+          "ValueError: could not convert string to float: '$value'",
+        );
       }
     }
-    throw RuntimeError(builtInToken('float'), "TypeError: float() argument must be a string or a number, not '${Interpreter.getTypeString(value)}'");
+    throw RuntimeError(
+      builtInToken('float'),
+      "TypeError: float() argument must be a string or a number, not '${Interpreter.getTypeString(value)}'",
+    );
   }
 
   /// Implementation of `bool(x=False)`
@@ -882,7 +1012,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNumArgs('bool', positionalArgs, keywordArgs, maxOptional: 1);
-    return positionalArgs.isEmpty ? false : interpreter.isTruthy(positionalArgs[0]);
+    return positionalArgs.isEmpty
+        ? false
+        : interpreter.isTruthy(positionalArgs[0]);
   }
 
   /// Implementation of `type(object)`
@@ -906,7 +1038,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (arg is int) return arg.abs();
     if (arg is double) return arg.abs();
     if (arg is bool) return arg ? 1 : 0; // abs(True)==1, abs(False)==0
-    throw RuntimeError(builtInToken('abs'), "TypeError: bad operand type for abs(): '${Interpreter.getTypeString(arg)}'");
+    throw RuntimeError(
+      builtInToken('abs'),
+      "TypeError: bad operand type for abs(): '${Interpreter.getTypeString(arg)}'",
+    );
   }
 
   /// Implementation of `input([prompt])`
@@ -937,8 +1072,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (positionalArgs.isEmpty) return PyList(<Object?>[]); // New empty list
 
     final iterable = positionalArgs[0];
-    if (iterable is PyList) return PyList(List.from(iterable.list)); // Return a shallow copy
-    if (iterable is String) return PyList(iterable.split('')); // List of characters
+    if (iterable is PyList)
+      return PyList(List.from(iterable.list)); // Return a shallow copy
+    if (iterable is String)
+      return PyList(iterable.split('')); // List of characters
     if (iterable is Map) return PyList(iterable.keys.toList()); // List of keys
 
     // Check if it's an iterable result from range() which is already a List
@@ -946,7 +1083,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     // TODO: Handle other potential iterable types if added (e.g., custom iterators)
 
-    throw RuntimeError(builtInToken('list'), "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable");
+    throw RuntimeError(
+      builtInToken('list'),
+      "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable",
+    );
   }
 
   /// Implementation of `dict(**kwarg)` / `dict(mapping)` / `dict(iterable)`
@@ -958,7 +1098,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   ) {
     // Python's dict is versatile. This is a simplified version.
     // It primarily handles dict() -> {} and dict(existing_map) -> copy.
-    _checkNumArgs('dict', positionalArgs, keywordArgs, maxOptional: 1, allowKeywords: true); // 0 or 1 positional
+    _checkNumArgs(
+      'dict',
+      positionalArgs,
+      keywordArgs,
+      maxOptional: 1,
+      allowKeywords: true,
+    ); // 0 or 1 positional
 
     final Map result = {};
 
@@ -975,18 +1121,29 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             final key = pair[0];
             final value = pair[1];
             if (!Interpreter.isHashable(key)) {
-              throw RuntimeError(builtInToken('dict'), "TypeError: unhashable type: '${Interpreter.getTypeString(key)}'");
+              throw RuntimeError(
+                builtInToken('dict'),
+                "TypeError: unhashable type: '${Interpreter.getTypeString(key)}'",
+              );
             }
             result[key] = value;
           } else if (item is PyList || item is String) {
-            throw RuntimeError(builtInToken('dict'),
-              "ValueError: dictionary update sequence element #${arg.list.indexOf(item)} has length ${pair!.length}; 2 is required");
+            throw RuntimeError(
+              builtInToken('dict'),
+              "ValueError: dictionary update sequence element #${arg.list.indexOf(item)} has length ${pair!.length}; 2 is required",
+            );
           } else {
-            throw RuntimeError(builtInToken('dict'), "ValueError: cannot convert dictionary update sequence element #${arg.list.indexOf(item)} to a sequence");
+            throw RuntimeError(
+              builtInToken('dict'),
+              "ValueError: cannot convert dictionary update sequence element #${arg.list.indexOf(item)} to a sequence",
+            );
           }
         }
       } else {
-        throw RuntimeError(builtInToken('dict'), "TypeError: '${arg.runtimeType}' object is not iterable");
+        throw RuntimeError(
+          builtInToken('dict'),
+          "TypeError: '${arg.runtimeType}' object is not iterable",
+        );
       }
     }
 
@@ -996,11 +1153,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     });
 
     return result;
-    
   }
 
-  static Object? _setBuiltin(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
-    _checkNumArgs('set', positionalArgs, keywordArgs, required: 0, maxOptional: 1);
+  static Object? _setBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs(
+      'set',
+      positionalArgs,
+      keywordArgs,
+      required: 0,
+      maxOptional: 1,
+    );
     _checkNoKeywords('set', keywordArgs);
     Set<Object?> resultSet = {};
     if (positionalArgs.isEmpty) {
@@ -1016,35 +1182,60 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     } else if (iterable is Map) {
       iterable = iterable.keys; // Convert Map to iterable of keys for set()
     }
-    if (iterable is Iterable) { // Handles List, Set, String chars, Map keys
+    if (iterable is Iterable) {
+      // Handles List, Set, String chars, Map keys
       for (var element in iterable) {
         if (!Interpreter.isHashable(element)) {
-            throw RuntimeError(builtInToken('set'), "TypeError: unhashable type: '${Interpreter.getTypeString(element)}'");
+          throw RuntimeError(
+            builtInToken('set'),
+            "TypeError: unhashable type: '${Interpreter.getTypeString(element)}'",
+          );
         }
         resultSet.add(element);
       }
       return resultSet;
     }
-    throw RuntimeError(builtInToken('set'), "TypeError: argument of type '${Interpreter.getTypeString(iterable)}' is not iterable");
+    throw RuntimeError(
+      builtInToken('set'),
+      "TypeError: argument of type '${Interpreter.getTypeString(iterable)}' is not iterable",
+    );
   }
 
- static Object? _tupleBuiltin(Interpreter interpreter, List<Object?> positionalArgs, Map<String, Object?> keywordArgs) {
-  _checkNumArgs('tuple', positionalArgs, keywordArgs, required: 0, maxOptional: 1);
-  _checkNoKeywords('tuple', keywordArgs);
-  if (positionalArgs.isEmpty) {
-    return <Object?>[]; // Empty tuple: tuple() -> represented as empty list
-  }
-  Object? iterable = positionalArgs[0];
-  if (iterable is Iterable) { // Handles List, Set, String chars, Map keys
-    if (iterable is Map) {
-      iterable = (iterable as Map).keys; // Convert Map to iterable of keys for tuple()
-    } else if (iterable is String) {
-      iterable = (iterable as String).split(''); // Convert String to iterable of chars
+  static Object? _tupleBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs(
+      'tuple',
+      positionalArgs,
+      keywordArgs,
+      required: 0,
+      maxOptional: 1,
+    );
+    _checkNoKeywords('tuple', keywordArgs);
+    if (positionalArgs.isEmpty) {
+      return <Object?>[]; // Empty tuple: tuple() -> represented as empty list
     }
-    return iterable.toList();
+    Object? iterable = positionalArgs[0];
+    if (iterable is Iterable) {
+      // Handles List, Set, String chars, Map keys
+      if (iterable is Map) {
+        iterable =
+            (iterable as Map)
+                .keys; // Convert Map to iterable of keys for tuple()
+      } else if (iterable is String) {
+        iterable = (iterable as String).split(
+          '',
+        ); // Convert String to iterable of chars
+      }
+      return iterable.toList();
+    }
+    throw RuntimeError(
+      builtInToken('tuple'),
+      "TypeError: argument of type '${Interpreter.getTypeString(iterable)}' is not iterable",
+    );
   }
-  throw RuntimeError(builtInToken('tuple'), "TypeError: argument of type '${Interpreter.getTypeString(iterable)}' is not iterable");
-}
 
   /// Implementation of `round(number[, ndigits])`
   /// Implements Python 3's "round half to even" behavior.
@@ -1053,33 +1244,46 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     List<Object?> positionalArgs,
     Map<String, Object?> keywordArgs,
   ) {
-    _checkNumArgs('round', positionalArgs, keywordArgs, required: 1, maxOptional: 1);
+    _checkNumArgs(
+      'round',
+      positionalArgs,
+      keywordArgs,
+      required: 1,
+      maxOptional: 1,
+    );
     _checkNoKeywords('round', keywordArgs);
 
     final numberArg = positionalArgs[0];
     int ndigits = 0; // Default ndigits
 
     if (positionalArgs.length == 2) {
-        final ndigitsArg = positionalArgs[1];
-        if (ndigitsArg == null) { // round(x, None) -> behaves like ndigits=0 but returns int
-            ndigits = 0; // Will return int later
-        } else if (ndigitsArg is int) {
-            ndigits = ndigitsArg;
-        } else if (ndigitsArg is bool) { // Python allows bools here too
-             ndigits = ndigitsArg ? 1: 0;
-        }
-         else {
-            throw RuntimeError(builtInToken('round'), "TypeError: 'ndigits' argument must be an integer, not '${Interpreter.getTypeString(ndigitsArg)}'");
-        }
+      final ndigitsArg = positionalArgs[1];
+      if (ndigitsArg == null) {
+        // round(x, None) -> behaves like ndigits=0 but returns int
+        ndigits = 0; // Will return int later
+      } else if (ndigitsArg is int) {
+        ndigits = ndigitsArg;
+      } else if (ndigitsArg is bool) {
+        // Python allows bools here too
+        ndigits = ndigitsArg ? 1 : 0;
+      } else {
+        throw RuntimeError(
+          builtInToken('round'),
+          "TypeError: 'ndigits' argument must be an integer, not '${Interpreter.getTypeString(ndigitsArg)}'",
+        );
+      }
     }
 
     num number; // Use num to handle int/double input
     if (numberArg is num) {
-        number = numberArg;
+      number = numberArg;
     } else if (numberArg is bool) {
-        number = numberArg ? 1 : 0;
+      number = numberArg ? 1 : 0;
     } else {
-        throw RuntimeError(builtInToken('round'), "TypeError: type ${Interpreter.getTypeString(numberArg)} not supported");
+      throw RuntimeError(
+        builtInToken('round'),
+        "TypeError: type ${Interpreter.getTypeString(numberArg)} not supported",
+      );
     }
     // --- Perform Rounding ---
     num factor = pow(10, ndigits);
@@ -1089,15 +1293,17 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     // Check if the scaled value is exactly halfway between two integers
     num remainder = scaledValue.remainder(1.0);
     num roundedScaledValue;
-    if ((remainder.abs() - 0.5).abs() < 1e-15) { // Check if effectively x.5 (handle float precision)
+    if ((remainder.abs() - 0.5).abs() < 1e-15) {
+      // Check if effectively x.5 (handle float precision)
       int floorInt = scaledValue.floor().toInt();
       int ceilInt = scaledValue.ceil().toInt();
       // Choose the even neighbor
-      if (floorInt % 2 == 0) { // is floor even?
-          roundedScaledValue = floorInt;
+      if (floorInt % 2 == 0) {
+        // is floor even?
+        roundedScaledValue = floorInt;
       } else {
-          // If floor is odd, the ceiling must be the even neighbor
-          roundedScaledValue = ceilInt;
+        // If floor is odd, the ceiling must be the even neighbor
+        roundedScaledValue = ceilInt;
       }
     } else {
       // Standard rounding (away from zero for > .5, towards zero for < .5)
@@ -1105,24 +1311,25 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       roundedScaledValue = scaledValue.round();
     }
     // --- Determine Return Type and Value ---
-    if (ndigits <= 0) { // Return int if ndigits is 0 or negative
+    if (ndigits <= 0) {
+      // Return int if ndigits is 0 or negative
       // For negative ndigits, we need to potentially return float if factor is not 1
-       num result = roundedScaledValue / factor;
-       // If ndigits was 0, return int. If negative, check if result is whole number.
-       if (ndigits == 0 || result.truncateToDouble() == result) {
-           return result.toInt();
-       } else {
-           // Should not happen for ndigits <= 0 after rounding logic? Test this.
-           // Python seems to return float here if original was float.
-           // Let's return int if it's a whole number result.
-           return result.toInt(); // Return int for ndigits <= 0
-       }
-
-    } else { // Return float if ndigits > 0
-        // The result should already be correctly scaled
-        num result = roundedScaledValue / factor;
-        // Ensure it's a double, even if it looks like an integer (e.g., round(123.0, 1))
-        return result.toDouble();
+      num result = roundedScaledValue / factor;
+      // If ndigits was 0, return int. If negative, check if result is whole number.
+      if (ndigits == 0 || result.truncateToDouble() == result) {
+        return result.toInt();
+      } else {
+        // Should not happen for ndigits <= 0 after rounding logic? Test this.
+        // Python seems to return float here if original was float.
+        // Let's return int if it's a whole number result.
+        return result.toInt(); // Return int for ndigits <= 0
+      }
+    } else {
+      // Return float if ndigits > 0
+      // The result should already be correctly scaled
+      num result = roundedScaledValue / factor;
+      // Ensure it's a double, even if it looks like an integer (e.g., round(123.0, 1))
+      return result.toDouble();
     }
   }
 
@@ -1134,7 +1341,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNoKeywords('min', keywordArgs); // Key function not supported yet
-    if (positionalArgs.isEmpty) throw RuntimeError(builtInToken('min'), "TypeError: min expected 1 argument, got 0");
+    if (positionalArgs.isEmpty)
+      throw RuntimeError(
+        builtInToken('min'),
+        "TypeError: min expected 1 argument, got 0",
+      );
 
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
@@ -1147,14 +1358,21 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       } else if (arg is Map) {
         valuesToCompare = arg.keys;
       } else {
-        throw RuntimeError(builtInToken('min'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
+        throw RuntimeError(
+          builtInToken('min'),
+          "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable",
+        );
       }
     } else {
       // Multiple argument version: min(arg1, arg2, ...)
       valuesToCompare = positionalArgs;
     }
 
-    if (valuesToCompare.isEmpty) throw RuntimeError(builtInToken('min'), "ValueError: min() arg is an empty sequence");
+    if (valuesToCompare.isEmpty)
+      throw RuntimeError(
+        builtInToken('min'),
+        "ValueError: min() arg is an empty sequence",
+      );
 
     Object? minValue = valuesToCompare.first;
     for (final value in valuesToCompare.skip(1)) {
@@ -1162,23 +1380,33 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         if (interpreter._compareValues(value, minValue) < 0) {
           minValue = value;
         }
-      } on RuntimeError { rethrow; } // Propagate comparison errors
-        catch(e) { // Catch unexpected comparison issues
-             throw RuntimeError(builtInToken('min'), "Error during comparison in min(): $e");
-        }
+      } on RuntimeError {
+        rethrow;
+      } // Propagate comparison errors
+      catch (e) {
+        // Catch unexpected comparison issues
+        throw RuntimeError(
+          builtInToken('min'),
+          "Error during comparison in min(): $e",
+        );
+      }
     }
     return minValue;
   }
 
   /// Implementation of `max(iterable, *[, key])` or `max(arg1, arg2, *args[, key])`
   /// Simplified: No key function. Handles iterable or multiple args.
-   static Object? _maxBuiltin(
+  static Object? _maxBuiltin(
     Interpreter interpreter,
     List<Object?> positionalArgs,
     Map<String, Object?> keywordArgs,
   ) {
     _checkNoKeywords('max', keywordArgs); // Key function not supported yet
-    if (positionalArgs.isEmpty) throw RuntimeError(builtInToken('max'), "TypeError: max expected 1 argument, got 0");
+    if (positionalArgs.isEmpty)
+      throw RuntimeError(
+        builtInToken('max'),
+        "TypeError: max expected 1 argument, got 0",
+      );
 
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
@@ -1190,24 +1418,35 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       } else if (arg is Map) {
         valuesToCompare = arg.keys;
       } else {
-        throw RuntimeError(builtInToken('max'), "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable");
+        throw RuntimeError(
+          builtInToken('max'),
+          "TypeError: '${Interpreter.getTypeString(arg)}' object is not iterable",
+        );
       }
     } else {
       valuesToCompare = positionalArgs;
     }
 
-    if (valuesToCompare.isEmpty) throw RuntimeError(builtInToken('max'), "ValueError: max() arg is an empty sequence");
+    if (valuesToCompare.isEmpty)
+      throw RuntimeError(
+        builtInToken('max'),
+        "ValueError: max() arg is an empty sequence",
+      );
 
     Object? maxValue = valuesToCompare.first;
     for (final value in valuesToCompare.skip(1)) {
-       try {
+      try {
         if (interpreter._compareValues(value, maxValue) > 0) {
           maxValue = value;
         }
-      } on RuntimeError { rethrow; }
-        catch(e) {
-             throw RuntimeError(builtInToken('max'), "Error during comparison in max(): $e");
-        }
+      } on RuntimeError {
+        rethrow;
+      } catch (e) {
+        throw RuntimeError(
+          builtInToken('max'),
+          "Error during comparison in max(): $e",
+        );
+      }
     }
     return maxValue;
   }
@@ -1219,11 +1458,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     List<Object?> positionalArgs,
     Map<String, Object?> keywordArgs,
   ) {
-    _checkNumArgs('sum', positionalArgs, keywordArgs, required: 1, maxOptional: 1);
+    _checkNumArgs(
+      'sum',
+      positionalArgs,
+      keywordArgs,
+      required: 1,
+      maxOptional: 1,
+    );
     _checkNoKeywords('sum', keywordArgs);
 
     final iterable = positionalArgs[0];
-    Object? start = (positionalArgs.length > 1) ? positionalArgs[1] : 0; // Default start is 0
+    Object? start =
+        (positionalArgs.length > 1)
+            ? positionalArgs[1]
+            : 0; // Default start is 0
 
     Iterable<Object?>? valuesToSum;
     if (iterable is PyList) {
@@ -1234,26 +1482,36 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       valuesToSum = iterable.values; // Sum values, not keys
     } else {
       // Cannot sum strings in Python
-      throw RuntimeError(builtInToken('sum'), "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable or not summable");
+      throw RuntimeError(
+        builtInToken('sum'),
+        "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable or not summable",
+      );
     }
-    if (valuesToSum.isEmpty && start == 0) return 0; // Mimic python sum([]) == 0
+    if (valuesToSum.isEmpty && start == 0)
+      return 0; // Mimic python sum([]) == 0
 
     Object? currentSum = start;
     Token plusOperatorToken = Token(TokenType.PLUS, '+', null, 0, 0);
     for (final value in valuesToSum) {
-       // Try adding - mimics '+' operator logic
-       try {
-          // Need a way to perform '+' operation reliably
-          currentSum = interpreter._performBinaryOperation(plusOperatorToken, currentSum, value, TokenType.PLUS);
-       } on RuntimeError catch(e) {
-           // Improve error message for sum() specifically
-           if (e.message.contains("unsupported operand type(s) for +")) {
-               throw RuntimeError(builtInToken('sum'),
-                 "TypeError: unsupported operand type(s) for +: '${Interpreter.getTypeString(currentSum)}' and '${Interpreter.getTypeString(value)}' in sum()"
-               );
-           }
-           rethrow; // Re-throw other RuntimeErrors
-       }
+      // Try adding - mimics '+' operator logic
+      try {
+        // Need a way to perform '+' operation reliably
+        currentSum = interpreter._performBinaryOperation(
+          plusOperatorToken,
+          currentSum,
+          value,
+          TokenType.PLUS,
+        );
+      } on RuntimeError catch (e) {
+        // Improve error message for sum() specifically
+        if (e.message.contains("unsupported operand type(s) for +")) {
+          throw RuntimeError(
+            builtInToken('sum'),
+            "TypeError: unsupported operand type(s) for +: '${Interpreter.getTypeString(currentSum)}' and '${Interpreter.getTypeString(value)}' in sum()",
+          );
+        }
+        rethrow; // Re-throw other RuntimeErrors
+      }
     }
     return currentSum;
   }
@@ -1271,113 +1529,156 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   // --- Helper for accurate string representation (repr) ---
   String repr(Object? object) {
-      if (object == null) return "None";
-      if (object is bool) return object ? "True" : "False";
-      if (object is String) {
-          // Add quotes and escape internal quotes/backslashes
-          String escaped = object
-              .replaceAll('\\', '\\\\')
-              .replaceAll("'", "\\'")
-              .replaceAll('\n', '\\n')
-              .replaceAll('\r', '\\r')
-              .replaceAll('\t', '\\t');
-          // Prefer single quotes unless string contains single quotes but not double
-          if (escaped.contains("'") && !escaped.contains('"')) {
-              return '"$escaped"';
-          }
-          return "'$escaped'";
+    if (object == null) return "None";
+    if (object is bool) return object ? "True" : "False";
+    if (object is String) {
+      // Add quotes and escape internal quotes/backslashes
+      String escaped = object
+          .replaceAll('\\', '\\\\')
+          .replaceAll("'", "\\'")
+          .replaceAll('\n', '\\n')
+          .replaceAll('\r', '\\r')
+          .replaceAll('\t', '\\t');
+      // Prefer single quotes unless string contains single quotes but not double
+      if (escaped.contains("'") && !escaped.contains('"')) {
+        return '"$escaped"';
       }
-      if (object is PyList) return '[${object.list.map(repr).join(', ')}]';
-      if (object is PyTuple) {
-        String content = object.tuple.map(repr).join(', ');
-        if (object.tuple.length == 1) content += ',';
-        return '($content)';
-      }
-      if (object is Set) {
-        if (object.isEmpty) return "set()";
-        return '{${object.map(repr).join(', ')}}';
-      }
-      if (object is Map) return '{${object.entries.map((e) => '${repr(e.key)}: ${repr(e.value)}').join(', ')}}';
+      return "'$escaped'";
+    }
+    if (object is PyList) return '[${object.list.map(repr).join(', ')}]';
+    if (object is PyTuple) {
+      String content = object.tuple.map(repr).join(', ');
+      if (object.tuple.length == 1) content += ',';
+      return '($content)';
+    }
+    if (object is Set) {
+      if (object.isEmpty) return "set()";
+      return '{${object.map(repr).join(', ')}}';
+    }
+    if (object is Map)
+      return '{${object.entries.map((e) => '${repr(e.key)}: ${repr(e.value)}').join(', ')}}';
 
-      if (object is PyCallable) return object.toString(); // <fn ...>, <native fn>, <method...>
-      if (object is PyClass) return "<class '${object.name}'>";
-      if (object is PyInstance) {
-        // TODO: call __repr__ when implemented
-        return object.toString(); // <MyClass object>
-      }
-      // Fallback für numbers and basic types
-      return object.toString();
+    if (object is PyCallable)
+      return object.toString(); // <fn ...>, <native fn>, <method...>
+    if (object is PyClass) return "<class '${object.name}'>";
+    if (object is PyInstance) {
+      // TODO: call __repr__ when implemented
+      return object.toString(); // <MyClass object>
+    }
+    // Fallback für numbers and basic types
+    return object.toString();
   }
 
   /// Creates a dummy token for error reporting within built-ins.
   static Token builtInToken(String name) {
-    return Token(TokenType.IDENTIFIER, name, null, 0, 0); // No accurate location info
+    return Token(
+      TokenType.IDENTIFIER,
+      name,
+      null,
+      0,
+      0,
+    ); // No accurate location info
   }
 
   /// Generic argument count and keyword checker for built-ins.
   static void _checkNumArgs(
     String funcName,
     List<Object?> positionalArgs,
-    Map<String, Object?> keywordArgs, // Keep this even if unused by checker for now
-    {int required = 0, int maxOptional = 0, bool allowKeywords = false})
-  {
+    Map<String, Object?>
+    keywordArgs, { // Keep this even if unused by checker for now
+    int required = 0,
+    int maxOptional = 0,
+    bool allowKeywords = false,
+  }) {
     if (!allowKeywords && keywordArgs.isNotEmpty) {
-      throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
+      throw RuntimeError(
+        builtInToken(funcName),
+        "TypeError: $funcName() takes no keyword arguments",
+      );
     }
     int totalAllowed = required + maxOptional;
     int actual = positionalArgs.length;
 
-    if (maxOptional == -1) { // Indicates variable args like min/max
-       if (actual < required) {
-            throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() expected at least $required arguments, got $actual");
-       }
-       // Max check doesn't apply
-    } else { // Fixed number of optional args
-        if (actual < required) {
-            String takes = "at least $required";
-             if (maxOptional == 0) takes = "exactly $required";
-            throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
+    if (maxOptional == -1) {
+      // Indicates variable args like min/max
+      if (actual < required) {
+        throw RuntimeError(
+          builtInToken(funcName),
+          "TypeError: $funcName() expected at least $required arguments, got $actual",
+        );
+      }
+      // Max check doesn't apply
+    } else {
+      // Fixed number of optional args
+      if (actual < required) {
+        String takes = "at least $required";
+        if (maxOptional == 0) takes = "exactly $required";
+        throw RuntimeError(
+          builtInToken(funcName),
+          "TypeError: $funcName() takes $takes positional arguments ($actual given)",
+        );
+      }
+      if (actual > totalAllowed) {
+        String takes = "exactly $required";
+        if (maxOptional > 0 && required > 0) {
+          takes = "from $required to $totalAllowed";
+        } else if (maxOptional > 0) {
+          takes = "at most $totalAllowed";
         }
-        if (actual > totalAllowed) {
-            String takes = "exactly $required";
-            if (maxOptional > 0 && required > 0) {
-              takes = "from $required to $totalAllowed";
-            } else if (maxOptional > 0) {
-              takes = "at most $totalAllowed";
-            }
-            throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes $takes positional arguments ($actual given)");
-        }
+        throw RuntimeError(
+          builtInToken(funcName),
+          "TypeError: $funcName() takes $takes positional arguments ($actual given)",
+        );
+      }
     }
   }
 
   /// Specific checker for functions that take NO keywords.
-  static void _checkNoKeywords(String funcName, Map<String, Object?> keywordArgs) {
-      if (keywordArgs.isNotEmpty) {
-           throw RuntimeError(builtInToken(funcName), "TypeError: $funcName() takes no keyword arguments");
-      }
+  static void _checkNoKeywords(
+    String funcName,
+    Map<String, Object?> keywordArgs,
+  ) {
+    if (keywordArgs.isNotEmpty) {
+      throw RuntimeError(
+        builtInToken(funcName),
+        "TypeError: $funcName() takes no keyword arguments",
+      );
+    }
   }
 
   // --- Comparison Helper used by min/max ---
   int _compareValues(Object? left, Object? right) {
-     try {
-         // Use the logic from BinaryExpr comparison
-         return _compare(left, right, builtInToken('<')); // Operator token is just for error msg context
-     } catch (e) {
-          // Rethrow comparison errors with a more generic message if needed
-          throw RuntimeError(builtInToken('comparison'), "Error during comparison: $e");
-     }
+    try {
+      // Use the logic from BinaryExpr comparison
+      return _compare(
+        left,
+        right,
+        builtInToken('<'),
+      ); // Operator token is just for error msg context
+    } catch (e) {
+      // Rethrow comparison errors with a more generic message if needed
+      throw RuntimeError(
+        builtInToken('comparison'),
+        "Error during comparison: $e",
+      );
+    }
   }
 
   // --- Binary Operation Helper used by sum ---
-   Object? _performBinaryOperation(Token operatorToken, Object? left, Object? right, TokenType opType) {
-     // This duplicates logic from visitBinaryExpr slightly, could be refactored
-     try {
-         // Simplified call to the core arithmetic logic
-         return _evaluateBinary(operatorToken, left, right);
-     } catch (e) {
-          // Catch and rethrow errors from the operation
-          rethrow;
-     }
+  Object? _performBinaryOperation(
+    Token operatorToken,
+    Object? left,
+    Object? right,
+    TokenType opType,
+  ) {
+    // This duplicates logic from visitBinaryExpr slightly, could be refactored
+    try {
+      // Simplified call to the core arithmetic logic
+      return _evaluateBinary(operatorToken, left, right);
+    } catch (e) {
+      // Catch and rethrow errors from the operation
+      rethrow;
+    }
   }
 
   // Helper to ensure an argument is an integer for built-ins.
@@ -1412,12 +1713,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (errorCallback != null) errorCallback(e.toString());
       print(e); // Report runtime errors
       // Set flag for REPL?
-      hadRuntimeError = true; // Assuming hadRuntimeError is defined globally for REPL
+      hadRuntimeError =
+          true; // Assuming hadRuntimeError is defined globally for REPL
       _lastExpressionValue = null;
     } on ReturnValue catch (_) {
       // A ReturnValue exception should only be caught inside a function call.
       // If it reaches here, it's an error (return outside function).
-      if (errorCallback != null) errorCallback("SyntaxError: 'return' outside function");
+      if (errorCallback != null)
+        errorCallback("SyntaxError: 'return' outside function");
       print(
         RuntimeError(
           Token(TokenType.RETURN, 'return', null, 0, 0),
@@ -1441,7 +1744,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Sets the interpreter's current environment to the given one for the duration
   /// of the block's execution and restores the previous environment afterwards.
   /// Crucial for function calls and potentially other scoped constructs.
-    void executeBlock(List<Stmt> statements, Environment environment) {
+  void executeBlock(List<Stmt> statements, Environment environment) {
     Environment previous = _environment;
     try {
       _environment = environment; // Switch to the new environment
@@ -1467,7 +1770,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Evaluates the expression and discards the result.
   @override
   void visitExpressionStmt(ExpressionStmt stmt) {
-    _lastExpressionValue  = evaluate(stmt.expression);
+    _lastExpressionValue = evaluate(stmt.expression);
   }
 
   /// Visitor method for handling a [FunctionStmt] (function definition).
@@ -1476,9 +1779,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   void visitFunctionStmt(FunctionStmt stmt) {
     // Create the function object, capturing the *current* environment as its closure.
-    PyFunction function = PyFunction.fromDef(stmt, _environment,
-      isInitializer: stmt.name.lexeme == "__init__");
-    _environment.define(stmt.name.lexeme, function); // Define the function in the current scope.
+    PyFunction function = PyFunction.fromDef(
+      stmt,
+      _environment,
+      isInitializer: stmt.name.lexeme == "__init__",
+    );
+    _environment.define(
+      stmt.name.lexeme,
+      function,
+    ); // Define the function in the current scope.
   }
 
   @override
@@ -1521,7 +1830,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (stmt.superclass != null) {
       evaluatedSuper = evaluate(stmt.superclass!);
       if (evaluatedSuper is! PyClass) {
-        throw RuntimeError(stmt.superclass!.name, "Superclass must be a class.");
+        throw RuntimeError(
+          stmt.superclass!.name,
+          "Superclass must be a class.",
+        );
       }
       superclassValue = evaluatedSuper;
     }
@@ -1530,7 +1842,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _environment.define(stmt.name.lexeme, null); //temporary
 
     // 2. create environment for class body
-    Environment classEnvironment = _environment; // default: enclosing environment
+    Environment classEnvironment =
+        _environment; // default: enclosing environment
     if (superclassValue != null) {
       // If super class exists, create a new environment containing the current one
       // and defining "super".
@@ -1549,7 +1862,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       PyFunction method = PyFunction.fromDef(
         methodStmt,
         classEnvironment, // Closure is the class environment
-        isInitializer: methodStmt.name.lexeme == "__init__"
+        isInitializer: methodStmt.name.lexeme == "__init__",
       );
       methods[methodStmt.name.lexeme] = method;
       // The method need not be defined in classEnvironment,
@@ -1584,7 +1897,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Sets/resets the [_isInLoop] flag. Includes basic infinite loop protection.
   @override
   void visitWhileStmt(WhileStmt stmt) {
-     bool previousLoopState = _isInLoop; // remember if while is inside another loop
+    bool previousLoopState =
+        _isInLoop; // remember if while is inside another loop
     _isInLoop = true;
     try {
       while (isTruthy(evaluate(stmt.condition))) {
@@ -1611,9 +1925,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   void visitForStmt(ForStmt stmt) {
     Object? iterableValue = evaluate(stmt.iterable);
-    Token iterableToken = stmt.iterable is VariableExpr?
-      (stmt.iterable as VariableExpr).name
-      : stmt.variable; // Best guess for token
+    Token iterableToken =
+        stmt.iterable is VariableExpr
+            ? (stmt.iterable as VariableExpr).name
+            : stmt.variable; // Best guess for token
 
     if (iterableValue is PyList) iterableValue = iterableValue.list;
 
@@ -1639,15 +1954,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           _environment.define(stmt.variable.lexeme, element);
           execute(stmt.body);
         } on _BreakException {
-            break;
+          break;
         } on _ContinueException {
-            continue;
+          continue;
         } on ReturnValue {
-        rethrow; // Propagate return upwards
+          rethrow; // Propagate return upwards
         }
       }
     } finally {
-        _isInLoop = previousLoopState; // Vorherigen Zustand wiederherstellen
+      _isInLoop = previousLoopState; // Vorherigen Zustand wiederherstellen
     }
   }
 
@@ -1671,12 +1986,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Throws [_ContinueException] if inside a loop, otherwise throws [RuntimeError].
   @override
   void visitContinueStmt(ContinueStmt stmt) {
-     if (!_isInLoop) {
+    if (!_isInLoop) {
       throw RuntimeError(stmt.token, "SyntaxError: 'continue' outside loop");
     }
     throw _continueException;
   }
-    
+
   // --- Expression Evaluation ---
 
   /// Helper to evaluate an expression within a specific [environment].
@@ -1709,9 +2024,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Visitor method for evaluating an [AugAssignExpr] (e.g., `+=`, `*=`).
-   /// Evaluates the target (variable or index/key) to get the current value,
-   /// evaluates the right-hand side value, performs the operation,
-   /// and assigns the result back to the target. Handles both variable and index targets.
+  /// Evaluates the target (variable or index/key) to get the current value,
+  /// evaluates the right-hand side value, performs the operation,
+  /// and assigns the result back to the target. Handles both variable and index targets.
   @override
   Object? visitAugAssignExpr(AugAssignExpr expr) {
     Object? rightValue = evaluate(expr.value);
@@ -1719,56 +2034,96 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       VariableExpr targetVar = expr.target as VariableExpr;
       Token name = targetVar.name;
       Object? currentValue = _environment.get(name);
-      Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
+      Object? result = _performAugmentedOperation(
+        expr.operator,
+        currentValue,
+        rightValue,
+      );
       _environment.assign(name, result);
       return result;
     } else if (expr.target is IndexGetExpr) {
       IndexGetExpr targetGet = expr.target as IndexGetExpr;
       Object? object = evaluate(targetGet.object);
       Object? keyOrIndex = evaluate(targetGet.index);
-      Object? currentValue = _performGetOperation(object, keyOrIndex, targetGet.bracket);
-      Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
-      _performSetOperation(object, keyOrIndex, result, targetGet.bracket);  
+      Object? currentValue = _performGetOperation(
+        object,
+        keyOrIndex,
+        targetGet.bracket,
+      );
+      Object? result = _performAugmentedOperation(
+        expr.operator,
+        currentValue,
+        rightValue,
+      );
+      _performSetOperation(object, keyOrIndex, result, targetGet.bracket);
       return result;
-    } 
+    }
     // Target: Attribute (e.g., self.count += 1)
     else if (expr.target is AttributeGetExpr) {
       AttributeGetExpr targetGet = expr.target as AttributeGetExpr;
       Object? object = evaluate(targetGet.object);
       if (object is! PyInstance) {
-          throw RuntimeError(targetGet.name, "Augmented assignment target must be an instance for attribute access.");
+        throw RuntimeError(
+          targetGet.name,
+          "Augmented assignment target must be an instance for attribute access.",
+        );
       }
       PyInstance instance = object;
       Token name = targetGet.name;
-      Object? currentValue = instance.get(name); // Use instance getter (handles method errors etc.)
-      Object? result = _performAugmentedOperation(expr.operator, currentValue, rightValue);
+      Object? currentValue = instance.get(
+        name,
+      ); // Use instance getter (handles method errors etc.)
+      Object? result = _performAugmentedOperation(
+        expr.operator,
+        currentValue,
+        rightValue,
+      );
       instance.set(name, result); // Use instance setter
       return result;
     } else {
-      throw RuntimeError(expr.operator, "Invalid target for augmented assignment.");
+      throw RuntimeError(
+        expr.operator,
+        "Invalid target for augmented assignment.",
+      );
     }
   }
 
   /// Helper for augmented assignment: performs the actual operation (e.g., +, *)
   /// based on the operator token type. Includes type checking.
-  Object? _performAugmentedOperation(Token operator, Object? left, Object? right) {
+  Object? _performAugmentedOperation(
+    Token operator,
+    Object? left,
+    Object? right,
+  ) {
     void checkNumbers(String op) {
-        if (left is! num || right is! num) {
-            throw RuntimeError(operator, "Unsupported operand type(s) for $op: '${left?.runtimeType}' and '${right?.runtimeType}'");
-        }
+      if (left is! num || right is! num) {
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for $op: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
+      }
     }
+
     void checkInts(String op) {
-        if (left is! int || right is! int) {
-            throw RuntimeError(operator, "Unsupported operand type(s) for $op: '${left?.runtimeType}' and '${right?.runtimeType}'. Operands must be integers.");
-        }
+      if (left is! int || right is! int) {
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for $op: '${left?.runtimeType}' and '${right?.runtimeType}'. Operands must be integers.",
+        );
+      }
     }
 
     switch (operator.type) {
       case TokenType.STAR_EQUAL:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is PyList) && right is int) return _multiplySequence(left!, right, operator);
-        if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, operator);
-        throw RuntimeError(operator, "Unsupported operand type(s) for *=: '${left?.runtimeType}' and '${right?.runtimeType}'");
+        if ((left is String || left is PyList) && right is int)
+          return _multiplySequence(left!, right, operator);
+        if (left is int && (right is String || right is List))
+          return _multiplySequence(right!, left, operator);
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for *=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
       case TokenType.STAR_STAR_EQUAL:
         checkNumbers("**=");
         return pow(left as num, right as num);
@@ -1776,26 +2131,39 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         if (left is num && right is num) return left + right;
         if (left is String && right is String) return left + right;
         if (left is List && right is List) return [...left, ...right];
-        throw RuntimeError(operator, "Unsupported operand type(s) for +=: '${left?.runtimeType}' and '${right?.runtimeType}'");
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for +=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
       case TokenType.MINUS_EQUAL:
         checkNumbers("-=");
         return (left as num) - (right as num);
       case TokenType.SLASH_EQUAL:
         checkNumbers("/=");
-        if (right == 0) throw RuntimeError(operator,"ZeroDivisionError");
+        if (right == 0) throw RuntimeError(operator, "ZeroDivisionError");
         return (left as num) / (right as num);
       case TokenType.SLASH_SLASH_EQUAL:
         checkNumbers("//=");
-        if (right == 0) throw RuntimeError(operator,"ZeroDivisionError");
+        if (right == 0) throw RuntimeError(operator, "ZeroDivisionError");
         return (left as num) ~/ (right as num);
       case TokenType.PERCENT_EQUAL:
         checkNumbers("%=");
         return _pythonModulo(left as num, right as num);
-      case TokenType.AMPERSAND_EQUAL:   checkInts("&="); return (left as int) & (right as int);
-      case TokenType.PIPE_EQUAL:        checkInts("|="); return (left as int) | (right as int);
-      case TokenType.CARET_EQUAL:       checkInts("^="); return (left as int) ^ (right as int);
-      case TokenType.LEFT_SHIFT_EQUAL:  checkInts("<<="); return (left as int) << (right as int);
-      case TokenType.RIGHT_SHIFT_EQUAL: checkInts(">>="); return (left as int) >> (right as int);
+      case TokenType.AMPERSAND_EQUAL:
+        checkInts("&=");
+        return (left as int) & (right as int);
+      case TokenType.PIPE_EQUAL:
+        checkInts("|=");
+        return (left as int) | (right as int);
+      case TokenType.CARET_EQUAL:
+        checkInts("^=");
+        return (left as int) ^ (right as int);
+      case TokenType.LEFT_SHIFT_EQUAL:
+        checkInts("<<=");
+        return (left as int) << (right as int);
+      case TokenType.RIGHT_SHIFT_EQUAL:
+        checkInts(">>=");
+        return (left as int) >> (right as int);
       default:
         throw RuntimeError(
           operator,
@@ -1805,35 +2173,56 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Helper for augmented assignment: performs the 'get' part for index/key targets.
-  Object? _performGetOperation(Object? object, Object? keyOrIndex, Token bracket) {
+  Object? _performGetOperation(
+    Object? object,
+    Object? keyOrIndex,
+    Token bracket,
+  ) {
     if (object is PyList) {
-      if (keyOrIndex is! int) throw RuntimeError(bracket, "List indices must be integers.");
+      if (keyOrIndex is! int)
+        throw RuntimeError(bracket, "List indices must be integers.");
       int index = keyOrIndex;
-      List l=object.list;
+      List l = object.list;
       if (index < 0) index += l.length;
-      if (index < 0 || index >= l.length) throw RuntimeError(bracket, "List index out of range.");
+      if (index < 0 || index >= l.length)
+        throw RuntimeError(bracket, "List index out of range.");
       return l[index];
     }
     if (object is Map) {
-      if (!object.containsKey(keyOrIndex)) throw RuntimeError(bracket, "KeyError: ${stringify(keyOrIndex)}");
+      if (!object.containsKey(keyOrIndex))
+        throw RuntimeError(bracket, "KeyError: ${stringify(keyOrIndex)}");
       return object[keyOrIndex];
     }
-    throw RuntimeError(bracket, "Object type does not support getting items for augmented assignment.");
+    throw RuntimeError(
+      bracket,
+      "Object type does not support getting items for augmented assignment.",
+    );
   }
 
   /// Helper for augmented assignment: performs the 'set' part for index/key targets.
-  void _performSetOperation(Object? object, Object? keyOrIndex, Object? value, Token bracket) {
+  void _performSetOperation(
+    Object? object,
+    Object? keyOrIndex,
+    Object? value,
+    Token bracket,
+  ) {
     if (object is PyList) {
-      if (keyOrIndex is! int) throw RuntimeError(bracket, "List indices must be integers.");
+      if (keyOrIndex is! int)
+        throw RuntimeError(bracket, "List indices must be integers.");
       int index = keyOrIndex;
-      List l=object.list;
+      List l = object.list;
       if (index < 0) index += l.length;
-      if (index < 0 || index >= l.length) throw RuntimeError(bracket, "List index out of range.");
+      if (index < 0 || index >= l.length)
+        throw RuntimeError(bracket, "List index out of range.");
       l[index] = value;
       return;
     }
     if (object is Map) {
-      if (!isHashable(keyOrIndex)) throw RuntimeError(bracket, "TypeError: unhashable type: '${keyOrIndex?.runtimeType ?? 'None'}'");
+      if (!isHashable(keyOrIndex))
+        throw RuntimeError(
+          bracket,
+          "TypeError: unhashable type: '${keyOrIndex?.runtimeType ?? 'None'}'",
+        );
       object[keyOrIndex] = value;
       return;
     }
@@ -1843,7 +2232,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       "Object type does not support setting items for augmented assignment.",
     );
   }
-  
+
   /// Visitor method for evaluating a [UnaryExpr] (`-`, `+`, `~`, `not`).
   /// Evaluates the operand, performs the unary operation, and returns the result.
   /// Includes type checking.
@@ -1855,18 +2244,31 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         return !isTruthy(operand);
       case TokenType.MINUS:
         if (operand is num) return -operand;
-        throw RuntimeError(expr.operator, "Operand for unary '-' must be a number (got ${operand?.runtimeType}).");
+        throw RuntimeError(
+          expr.operator,
+          "Operand for unary '-' must be a number (got ${operand?.runtimeType}).",
+        );
       case TokenType.PLUS:
         if (operand is num) return operand;
-        throw RuntimeError(expr.operator, "Operand for unary '+' must be a number (got ${operand?.runtimeType}).");
-       case TokenType.TILDE:
-        if (operand is int) return -(operand+1);
+        throw RuntimeError(
+          expr.operator,
+          "Operand for unary '+' must be a number (got ${operand?.runtimeType}).",
+        );
+      case TokenType.TILDE:
+        if (operand is int) return -(operand + 1);
         // Python allows ~ on bool (True -> -2, False -> -1), but not on float
-        if (operand is bool) return operand ? -(1+1) : -(0+1); // results in -2 and -1
-        throw RuntimeError(expr.operator, "TypeError: bad operand type for unary ~: '${operand?.runtimeType}'. Must be an integer or boolean.");
+        if (operand is bool)
+          return operand ? -(1 + 1) : -(0 + 1); // results in -2 and -1
+        throw RuntimeError(
+          expr.operator,
+          "TypeError: bad operand type for unary ~: '${operand?.runtimeType}'. Must be an integer or boolean.",
+        );
       default:
         // should not occur
-        throw RuntimeError(expr.operator, "Unreachable: Unknown unary operator.");
+        throw RuntimeError(
+          expr.operator,
+          "Unreachable: Unknown unary operator.",
+        );
     }
   }
 
@@ -1874,70 +2276,140 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   Object? _evaluateBinary(Token operator, Object? left, Object? right) {
     void checkNumbers() {
       if (left is! num || right is! num) {
-        throw RuntimeError(operator,"TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'");
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       }
     }
+
     void checkInts() {
       if (left is! int || right is! int) {
-        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'. Must be integers.");
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'. Must be integers.",
+        );
       }
     }
+
     void checkComparable() {
-      if (!((left is num && right is num) || (left is String && right is String))) {
-        throw RuntimeError(operator, "TypeError: '${operator.lexeme}' not supported between instances of '${getTypeString(left)}' and '${getTypeString(right)}'");
+      if (!((left is num && right is num) ||
+          (left is String && right is String))) {
+        throw RuntimeError(
+          operator,
+          "TypeError: '${operator.lexeme}' not supported between instances of '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       }
     }
+
     switch (operator.type) {
-      case TokenType.MINUS: checkNumbers(); return (left as num) - (right as num);
+      case TokenType.MINUS:
+        checkNumbers();
+        return (left as num) - (right as num);
       case TokenType.PLUS:
         if (left is num && right is num) return left + right;
         if (left is String && right is String) return left + right;
-        if (left is PyList && right is PyList) return PyList([...left.list, ...right.list]);
-         if (left is PyTuple && right is PyTuple) return PyTuple([...left.tuple, ...right.tuple]);
-        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for +: '${getTypeString(left)}' and '${getTypeString(right)}'");
+        if (left is PyList && right is PyList)
+          return PyList([...left.list, ...right.list]);
+        if (left is PyTuple && right is PyTuple)
+          return PyTuple([...left.tuple, ...right.tuple]);
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for +: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       case TokenType.SLASH:
         checkNumbers();
         if (_isZero(right)) {
-          throw RuntimeError(operator,"ZeroDivisionError: float division by zero");
+          throw RuntimeError(
+            operator,
+            "ZeroDivisionError: float division by zero",
+          );
         }
         return (left as num).toDouble() / (right as num).toDouble();
       case TokenType.SLASH_SLASH:
         checkNumbers();
         if (_isZero(right)) {
-          throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero");
-        } return (left as num) ~/ (right as num);
+          throw RuntimeError(
+            operator,
+            "ZeroDivisionError: integer division or modulo by zero",
+          );
+        }
+        return (left as num) ~/ (right as num);
       case TokenType.STAR:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is PyList) && right is int) return _multiplySequence(left!, right, operator);
-        if (left is int && (right is String || right is List)) return _multiplySequence(right!, left, operator);
-        throw RuntimeError(operator, "TypeError: unsupported operand type(s) for *: '${getTypeString(left)}' and '${getTypeString(right)}'");
+        if ((left is String || left is PyList) && right is int)
+          return _multiplySequence(left!, right, operator);
+        if (left is int && (right is String || right is List))
+          return _multiplySequence(right!, left, operator);
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for *: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       case TokenType.STAR_STAR:
         checkNumbers();
-        return pow(left as num, right as num); // Might need try-catch for domain errors
+        return pow(
+          left as num,
+          right as num,
+        ); // Might need try-catch for domain errors
       case TokenType.PERCENT:
         checkNumbers();
         if (_isZero(right)) {
-          throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero");
-        } return _pythonModulo(left as num, right as num);
-      case TokenType.GREATER: checkComparable(); return _compare(left, right, operator) > 0;
-      case TokenType.GREATER_EQUAL: checkComparable(); return _compare(left, right, operator) >= 0;
-      case TokenType.LESS: checkComparable(); return _compare(left, right, operator) < 0;
-      case TokenType.LESS_EQUAL: checkComparable(); return _compare(left, right, operator) <= 0;
-      case TokenType.BANG_EQUAL: return !isEqual(left, right);
-      case TokenType.EQUAL_EQUAL: return isEqual(left, right);
+          throw RuntimeError(
+            operator,
+            "ZeroDivisionError: integer division or modulo by zero",
+          );
+        }
+        return _pythonModulo(left as num, right as num);
+      case TokenType.GREATER:
+        checkComparable();
+        return _compare(left, right, operator) > 0;
+      case TokenType.GREATER_EQUAL:
+        checkComparable();
+        return _compare(left, right, operator) >= 0;
+      case TokenType.LESS:
+        checkComparable();
+        return _compare(left, right, operator) < 0;
+      case TokenType.LESS_EQUAL:
+        checkComparable();
+        return _compare(left, right, operator) <= 0;
+      case TokenType.BANG_EQUAL:
+        return !isEqual(left, right);
+      case TokenType.EQUAL_EQUAL:
+        return isEqual(left, right);
 
-      case TokenType.AMPERSAND: checkInts(); return (left as int) & (right as int);
-      case TokenType.PIPE: checkInts(); return (left as int) | (right as int);
-      case TokenType.CARET: checkInts(); return (left as int) ^ (right as int);
-      case TokenType.LEFT_SHIFT: checkInts(); return (left as int) << (right as int);
-      case TokenType.RIGHT_SHIFT: checkInts(); return (left as int) >> (right as int);
+      case TokenType.AMPERSAND:
+        checkInts();
+        return (left as int) & (right as int);
+      case TokenType.PIPE:
+        checkInts();
+        return (left as int) | (right as int);
+      case TokenType.CARET:
+        checkInts();
+        return (left as int) ^ (right as int);
+      case TokenType.LEFT_SHIFT:
+        checkInts();
+        return (left as int) << (right as int);
+      case TokenType.RIGHT_SHIFT:
+        checkInts();
+        return (left as int) >> (right as int);
 
       case TokenType.IN:
-        if (right is PyList || right is PyTuple || (right is String && left is String)) { // Works for Lists (Tuples) and Strings
+        if (right is PyList ||
+            right is PyTuple ||
+            (right is String && left is String)) {
+          // Works for Lists (Tuples) and Strings
           // Simple linear search for 'in' on List/String
           // Note: String check is more efficient with contains
-          if (right is String) return right.contains(stringify(left)); // Convert left to string for check
-          List l=right is PyList? right.list : right is PyTuple? right.tuple : [];
+          if (right is String)
+            return right.contains(
+              stringify(left),
+            ); // Convert left to string for check
+          List l =
+              right is PyList
+                  ? right.list
+                  : right is PyTuple
+                  ? right.tuple
+                  : [];
           // For List (Tuple) use isEqual for comparison
           for (var element in l) {
             if (isEqual(left, element)) return true;
@@ -1946,24 +2418,37 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         } else if (right is Map) {
           // Check if key exists (requires left to be hashable)
           if (!isHashable(left)) {
-            throw RuntimeError(operator, "TypeError: unhashable type: '${getTypeString(left)}' for 'in' operator with dictionary");
+            throw RuntimeError(
+              operator,
+              "TypeError: unhashable type: '${getTypeString(left)}' for 'in' operator with dictionary",
+            );
           }
           return right.containsKey(left);
         } else if (right is Set) {
           // Check if element exists (requires left to be hashable)
           if (!isHashable(left)) {
             // Similar to dicts, unhashable keys won't be found
-            throw RuntimeError(operator, "TypeError: unhashable type: '${getTypeString(left)}' for 'in' operator with set");
+            throw RuntimeError(
+              operator,
+              "TypeError: unhashable type: '${getTypeString(left)}' for 'in' operator with set",
+            );
           }
           return right.contains(left); // Set.contains uses hash/equality
         }
-        throw RuntimeError(operator, "TypeError: argument of type '${getTypeString(right)}' is not iterable for 'in' operator");
-      default: throw RuntimeError(operator, "Internal error: Unknown binary operator type ${operator.type}");
+        throw RuntimeError(
+          operator,
+          "TypeError: argument of type '${getTypeString(right)}' is not iterable for 'in' operator",
+        );
+      default:
+        throw RuntimeError(
+          operator,
+          "Internal error: Unknown binary operator type ${operator.type}",
+        );
     }
   }
 
   bool _isZero(Object? obj) {
-      return (obj is num) && obj == 0;
+    return (obj is num) && obj == 0;
   }
 
   /// Visitor method for evaluating a [BinaryExpr] (arithmetic, comparison, bitwise).
@@ -1979,17 +2464,24 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (left is num && right is num) return left.compareTo(right);
     if (left is String && right is String) return left.compareTo(right);
     // Python cannot compare different types (except for numbers)
-    throw RuntimeError(operator, "TypeError: '${operator.lexeme}' not supported between instances of '${left?.runtimeType}' and '${right?.runtimeType}'");
+    throw RuntimeError(
+      operator,
+      "TypeError: '${operator.lexeme}' not supported between instances of '${left?.runtimeType}' and '${right?.runtimeType}'",
+    );
   }
 
   /// Helper for Python's specific modulo behavior (result has same sign as divisor).
   num _pythonModulo(num a, num b) {
     if (b == 0) {
-      throw RuntimeError(Token(TokenType.PERCENT, '%', null, 0,0),
-        a is int && b is int? "ZeroDivisionError: integer modulo by zero" : "ZeroDivisionError: float modulo");
+      throw RuntimeError(
+        Token(TokenType.PERCENT, '%', null, 0, 0),
+        a is int && b is int
+            ? "ZeroDivisionError: integer modulo by zero"
+            : "ZeroDivisionError: float modulo",
+      );
     }
-    var result = a%b;
-    if (result>=0 != b>=0) result += b;
+    var result = a % b;
+    if (result >= 0 != b >= 0) result += b;
     return result;
   }
 
@@ -2018,7 +2510,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   Object? visitCallExpr(CallExpr expr) {
     Object? callee = evaluate(expr.callee); // Evaluate the object being called
     if (callee is! PyCallable) {
-      throw RuntimeError(expr.paren, "Object of type '${callee?.runtimeType ?? 'None'}' is not callable.");
+      throw RuntimeError(
+        expr.paren,
+        "Object of type '${callee?.runtimeType ?? 'None'}' is not callable.",
+      );
     }
     PyCallable function = callee;
     // Evaluate arguments (both positional and keyword values)
@@ -2086,7 +2581,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         );
       }
       int index = key;
-      List l=object.list;
+      List l = object.list;
       // Handle negative indices
       if (index < 0) index += l.length;
 
@@ -2207,7 +2702,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             result.write(_formatValue(value, part.formatSpec!));
           } catch (e) {
             // Catch formatting errors
-            throw RuntimeError(expr.token, "Error formatting value in f-string: $e");
+            throw RuntimeError(
+              expr.token,
+              "Error formatting value in f-string: $e",
+            );
           }
         } else {
           // No format specifier, just convert value to string
@@ -2234,30 +2732,41 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     bool zeropadding = false;
     String remainingSpec = formatSpec;
 
-   // Check for alignment characters first
-   if (remainingSpec.length >= 2 && (remainingSpec[1] == '<' || remainingSpec[1] == '>' || remainingSpec[1] == '^'
-    || remainingSpec[1] == '=')) {
+    // Check for alignment characters first
+    if (remainingSpec.length >= 2 &&
+        (remainingSpec[1] == '<' ||
+            remainingSpec[1] == '>' ||
+            remainingSpec[1] == '^' ||
+            remainingSpec[1] == '=')) {
       fill = remainingSpec[0];
       align = remainingSpec[1];
       remainingSpec = remainingSpec.substring(2);
-   } else if (remainingSpec.isNotEmpty && (remainingSpec[0] == '<' || remainingSpec[0] == '>' || remainingSpec[0] == '^'
-    || remainingSpec[0] == '=')) {
+    } else if (remainingSpec.isNotEmpty &&
+        (remainingSpec[0] == '<' ||
+            remainingSpec[0] == '>' ||
+            remainingSpec[0] == '^' ||
+            remainingSpec[0] == '=')) {
       align = remainingSpec[0];
       remainingSpec = remainingSpec.substring(1);
-   }
+    }
     // Sign
-    if (remainingSpec.isNotEmpty && (remainingSpec[0] == '+' || remainingSpec[0] == '-' || remainingSpec[0] == ' ')) {
+    if (remainingSpec.isNotEmpty &&
+        (remainingSpec[0] == '+' ||
+            remainingSpec[0] == '-' ||
+            remainingSpec[0] == ' ')) {
       sign = remainingSpec[0];
       remainingSpec = remainingSpec.substring(1);
     }
     // fill='0' without alignment
     if (remainingSpec.isNotEmpty && remainingSpec[0] == '0' && fill == ' ') {
-       zeropadding = true;
-       remainingSpec = remainingSpec.substring(1);
-     }
+      zeropadding = true;
+      remainingSpec = remainingSpec.substring(1);
+    }
     // Width (simple integer parsing)
     int w = 0;
-    while (remainingSpec.isNotEmpty && remainingSpec[0].compareTo('0') >= 0 && remainingSpec[0].compareTo('9') <= 0) {
+    while (remainingSpec.isNotEmpty &&
+        remainingSpec[0].compareTo('0') >= 0 &&
+        remainingSpec[0].compareTo('9') <= 0) {
       w = w * 10 + (remainingSpec.codeUnitAt(0) - '0'.codeUnitAt(0));
       remainingSpec = remainingSpec.substring(1);
     }
@@ -2267,7 +2776,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (remainingSpec.isNotEmpty && remainingSpec[0] == '.') {
       remainingSpec = remainingSpec.substring(1);
       int p = 0;
-      while (remainingSpec.isNotEmpty && remainingSpec[0].compareTo('0') >= 0 && remainingSpec[0].compareTo('9') <= 0) {
+      while (remainingSpec.isNotEmpty &&
+          remainingSpec[0].compareTo('0') >= 0 &&
+          remainingSpec[0].compareTo('9') <= 0) {
         p = p * 10 + (remainingSpec.codeUnitAt(0) - '0'.codeUnitAt(0));
         remainingSpec = remainingSpec.substring(1);
       }
@@ -2276,7 +2787,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     // Type
     if (remainingSpec.isNotEmpty) {
-      type = remainingSpec[remainingSpec.length - 1]; // Assume type is last char
+      type =
+          remainingSpec[remainingSpec.length - 1]; // Assume type is last char
     }
 
     if (zeropadding) {
@@ -2291,14 +2803,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     String formattedValue;
     switch (type) {
       case 'd': // Integer
-        if (align=='') align='>';
+        if (align == '') align = '>';
         if (value is bool) value = value ? 1 : 0; // Handle bools as ints
         if (value is! int) {
           // Try converting floats if they are whole numbers
           if (value is double && value.truncateToDouble() == value) {
             value = value.toInt();
           } else {
-            throw FormatException("Cannot format value of type '${getTypeString(value)}' with 'd'");
+            throw FormatException(
+              "Cannot format value of type '${getTypeString(value)}' with 'd'",
+            );
           }
         }
         formattedValue = value.toString();
@@ -2311,9 +2825,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         // Negative sign is handled by toString()
         break;
       case 'f': // Float (fixed point)
-        if (align=='') align='>';
+        if (align == '') align = '>';
         if (value is bool) value = value ? 1.0 : 0.0;
-        if (value is! num) throw FormatException("Cannot format value of type '${getTypeString(value)}' with 'f'");
+        if (value is! num)
+          throw FormatException(
+            "Cannot format value of type '${getTypeString(value)}' with 'f'",
+          );
         double numValue = (value is int) ? value.toDouble() : value as double;
         formattedValue = numValue.toStringAsFixed(precision);
         // Handle sign for float
@@ -2324,10 +2841,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         }
         // Negative sign is handled by toStringAsFixed()
         break;
-        // TODO: Add more types: 's' (string), 'e' (exponent), 'g' (general), '%' (percentage), 'b' (binary), 'o' (octal), 'x'/'X' (hex)
+      // TODO: Add more types: 's' (string), 'e' (exponent), 'g' (general), '%' (percentage), 'b' (binary), 'o' (octal), 'x'/'X' (hex)
       case 's': // String (default)
       default:
-        if (align=='') align='<';
+        if (align == '') align = '<';
         formattedValue = stringify(value); // Use default stringify
         // String formatting ignores sign specifiers generally
         break;
@@ -2336,7 +2853,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     // --- Apply Padding and Alignment ---
     if (width > 0 && formattedValue.length < width) {
       int paddingNeeded = width - formattedValue.length;
-      String padding = (zeropadding? '0' : fill) * paddingNeeded;
+      String padding = (zeropadding ? '0' : fill) * paddingNeeded;
       switch (align) {
         case '<': // Left align (default for strings)
           formattedValue = formattedValue + padding;
@@ -2347,13 +2864,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         case '^': // Center align
           int leftPad = paddingNeeded ~/ 2;
           int rightPad = paddingNeeded - leftPad;
-          formattedValue = (fill * leftPad) + formattedValue + (fill * rightPad);
+          formattedValue =
+              (fill * leftPad) + formattedValue + (fill * rightPad);
           break;
         case '=': // Sign-aware padding (places pad after sign, before digits)
-          if (formattedValue.startsWith('+') || formattedValue.startsWith('-') || formattedValue.startsWith(' ')) {
-            formattedValue = formattedValue[0] + padding + formattedValue.substring(1);
+          if (formattedValue.startsWith('+') ||
+              formattedValue.startsWith('-') ||
+              formattedValue.startsWith(' ')) {
+            formattedValue =
+                formattedValue[0] + padding + formattedValue.substring(1);
           } else {
-            formattedValue = padding + formattedValue; // Fallback like right align
+            formattedValue =
+                padding + formattedValue; // Fallback like right align
           }
           break;
       }
@@ -2377,7 +2899,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<Object?, Object?> map = {};
     if (expr.keys.length != expr.values.length) {
       // Should be caught by parser, but safety check
-      throw RuntimeError(expr.brace, "Internal error: Mismatched keys/values in dictionary literal.");
+      throw RuntimeError(
+        expr.brace,
+        "Internal error: Mismatched keys/values in dictionary literal.",
+      );
     }
     for (int i = 0; i < expr.keys.length; i++) {
       Object? key = evaluate(expr.keys[i]);
@@ -2407,18 +2932,21 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     for (Expr elemExpr in expr.elements) {
       Object? element = evaluate(elemExpr);
       if (!isHashable(element)) {
-        throw RuntimeError(expr.brace, "TypeError: unhashable type: '${getTypeString(element)}'");
+        throw RuntimeError(
+          expr.brace,
+          "TypeError: unhashable type: '${getTypeString(element)}'",
+        );
       }
       // --- Python bool/int equivalence check ---
       bool skipAdd = false;
       if (element == true) {
-          if (elements.contains(1)) skipAdd = true;
+        if (elements.contains(1)) skipAdd = true;
       } else if (element == 1) {
-          if (elements.contains(true)) skipAdd = true;
+        if (elements.contains(true)) skipAdd = true;
       } else if (element == false) {
-          if (elements.contains(0)) skipAdd = true;
+        if (elements.contains(0)) skipAdd = true;
       } else if (element == 0) {
-          if (elements.contains(false)) skipAdd = true;
+        if (elements.contains(false)) skipAdd = true;
       }
       if (!skipAdd) {
         elements.add(element); // Add to the temporary Dart set
@@ -2431,7 +2959,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Mimics Python's rules (numbers, strings, booleans, None are hashable; lists, dicts are not).
   static bool isHashable(Object? key) {
     if (key == null) return true; // None is hashable
-    if (key is num || key is String || key is bool || key is PyCallable || key is PyTuple) {
+    if (key is num ||
+        key is String ||
+        key is bool ||
+        key is PyCallable ||
+        key is PyTuple) {
       return true;
     }
     if (key is Set || key is PyTuple || key is Map) return false;
@@ -2468,7 +3000,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   @override
   Object? visitAttributeGetExpr(AttributeGetExpr expr) {
     Object? object = evaluate(expr.object); // Evaluate the object part first
-    String name = expr.name.lexeme;         // The attribute name
+    String name = expr.name.lexeme; // The attribute name
 
     PyCallableNativeImpl? impl;
 
@@ -2503,20 +3035,26 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       try {
         // Let the instance handle the lookup (checks fields, then class methods)
         return object.get(expr.name);
-      } on RuntimeError catch(e) {
+      } on RuntimeError catch (e) {
         // Improve error message consistency - ensure it's an AttributeError
         if (!e.message.startsWith("AttributeError:")) {
-          throw RuntimeError(expr.name, "AttributeError: '${object.klass.name}' object has no attribute '$name'");
+          throw RuntimeError(
+            expr.name,
+            "AttributeError: '${object.klass.name}' object has no attribute '$name'",
+          );
         }
         rethrow; // Rethrow if it was already an AttributeError
       }
     }
 
     // If the attribute/method wasn't found on either native types or instances
-    throw RuntimeError(expr.name, "AttributeError: '${getTypeString(object)}' object has no attribute '$name'");
+    throw RuntimeError(
+      expr.name,
+      "AttributeError: '${getTypeString(object)}' object has no attribute '$name'",
+    );
   }
 
-   @override
+  @override
   Object? visitAttributeSetExpr(AttributeSetExpr expr) {
     Object? object = evaluate(expr.object);
     if (object is PyInstance) {
@@ -2529,29 +3067,40 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   @override
   Object? visitSuperExpr(SuperExpr expr) {
-      // 1. Lookup 'super' in current environment.
-      //    Since methods get their closure from the class environment, this should find the PyClass object from the super class
-      Object? superclassObj = _environment.get(expr.keyword);
-      if (superclassObj is! PyClass) {
-          // This should not happen if 'super()' is used only in class methods
-          throw RuntimeError(expr.keyword, "'super' is not bound to a class in this context.");
-      }
-      PyClass superclass = superclassObj;
+    // 1. Lookup 'super' in current environment.
+    //    Since methods get their closure from the class environment, this should find the PyClass object from the super class
+    Object? superclassObj = _environment.get(expr.keyword);
+    if (superclassObj is! PyClass) {
+      // This should not happen if 'super()' is used only in class methods
+      throw RuntimeError(
+        expr.keyword,
+        "'super' is not bound to a class in this context.",
+      );
+    }
+    PyClass superclass = superclassObj;
 
-      // 2. Get 'self' from the current environment (that is set up during method calls).
-      Object? object = _environment.get(Token(TokenType.IDENTIFIER /* war SELF */, "self", null, 0,0));
-      if (object is! PyInstance) {
-          throw RuntimeError(expr.keyword, "'self' is not bound in this context (needed for super).");
-      }
+    // 2. Get 'self' from the current environment (that is set up during method calls).
+    Object? object = _environment.get(
+      Token(TokenType.IDENTIFIER /* war SELF */, "self", null, 0, 0),
+    );
+    if (object is! PyInstance) {
+      throw RuntimeError(
+        expr.keyword,
+        "'self' is not bound in this context (needed for super).",
+      );
+    }
 
-      // 3. Find the method in the super class.
-      PyFunction? method = superclass.findMethod(expr.method.lexeme);
-      if (method == null) {
-          throw RuntimeError(expr.method, "AttributeError: 'super' object (referring to class ${superclass.name}) has no attribute '${expr.method.lexeme}'");
-      }
+    // 3. Find the method in the super class.
+    PyFunction? method = superclass.findMethod(expr.method.lexeme);
+    if (method == null) {
+      throw RuntimeError(
+        expr.method,
+        "AttributeError: 'super' object (referring to class ${superclass.name}) has no attribute '${expr.method.lexeme}'",
+      );
+    }
 
-      // 4. Bind the method of the super class to the current instance ('self').
-      return method.bind(object);
+    // 4. Bind the method of the super class to the current instance ('self').
+    return method.bind(object);
   }
 
   // --- Helper Methods ---
@@ -2618,7 +3167,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         return true;
       } catch (e) {
         // Catch potential errors during comparison within Set logic
-        throw RuntimeError(builtInToken("set =="), "Error during Set comparison: $e");
+        throw RuntimeError(
+          builtInToken("set =="),
+          "Error during Set comparison: $e",
+        );
       }
     }
     if (a is Map && b is Map) {
@@ -2637,13 +3189,17 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
               break;
             }
           }
-          if (!keyFoundInB) return false; // Key from 'a' not found in 'b' using deep equality
+          if (!keyFoundInB)
+            return false; // Key from 'a' not found in 'b' using deep equality
           // Recursively compare values using deep equality
           if (!internalIsEqual(a[keyA], valueBForKeyA)) return false;
         }
         return true; // All keys and values matched
-      } catch(e) {
-        throw RuntimeError(builtInToken("dict =="), "Error during dict comparison: $e");
+      } catch (e) {
+        throw RuntimeError(
+          builtInToken("dict =="),
+          "Error during dict comparison: $e",
+        );
       }
     }
     // --- Primitive Types & Fallback ---
@@ -2654,15 +3210,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if ((a is num && b is num) ||
         (a is bool && b is bool) ||
         (a is String && b is String)) {
-       return a == b;
+      return a == b;
     }
     // --- Other Types (Callables, Classes, Instances) ---
     // Default Python behavior is identity comparison unless __eq__ is implemented.
     if (a is PyCallable && b is PyCallable) return identical(a, b);
     if (a is PyClass && b is PyClass) return identical(a, b);
     if (a is PyInstance && b is PyInstance) {
-       // TODO: Later, check for and call __eq__ method if present
-       return identical(a, b);
+      // TODO: Later, check for and call __eq__ method if present
+      return identical(a, b);
     }
     // --- Incompatible Types or Unhandled Cases ---
     // If types are different (and not handled above, e.g., PyList vs PyTuple),
@@ -2688,15 +3244,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       hash = hash ^ (elementHash + 0x9e3779b9 + (hash << 6) + (hash >> 2));
     }
     return hash;
- }
+  }
 
   // Helper to get hash for any hashable object
   static int _computeObjectHash(Object? obj) {
     if (!isHashable(obj)) {
       // Should have been checked before calling, but defensive check
-      throw ArgumentError("Cannot compute hash for unhashable type: ${Interpreter.getTypeString(obj)}");
+      throw ArgumentError(
+        "Cannot compute hash for unhashable type: ${Interpreter.getTypeString(obj)}",
+      );
     }
-    if (obj is PyTuple) { // It's a tuple proxy
+    if (obj is PyTuple) {
+      // It's a tuple proxy
       return Interpreter._computeTupleHash(obj.tuple);
     }
     // For primitives and other hashable types, Dart's hashCode is sufficient
@@ -2706,6 +3265,6 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Converts a runtime object into its string representation, similar to Python's `str()`.
   /// Handles `None`, `True`, `False`, numbers, strings, lists, maps, and callables.
   String stringify(Object? object) {
-    return object is String? object : repr(object);
+    return object is String ? object : repr(object);
   }
 }
