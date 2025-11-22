@@ -622,7 +622,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Default print implementation writing to stdout, handling partial lines.
-  void _printWithBuffer(s) {
+  void _printWithBuffer(String s) {
     int n=s.lastIndexOf("\n");
     String first = "";
     if (n>=0) {
@@ -2224,7 +2224,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       remainingSpec = remainingSpec.substring(1);
     }
     // fill='0' without alignment
-    if (remainingSpec.length > 0 && remainingSpec[0] == '0' && fill == ' ') {
+    if (remainingSpec.isNotEmpty && remainingSpec[0] == '0' && fill == ' ') {
        zeropadding = true;
        remainingSpec = remainingSpec.substring(1);
      }

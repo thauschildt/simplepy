@@ -1,3 +1,6 @@
+## 1.2.1
+- improve package description and fix linter warnings
+
 ## 1.2.0
 - first public version
 

@@ -10,7 +10,7 @@ abstract class Expr {
   /// Accepts an [ExprVisitor] and calls the appropriate visit method based on
   /// the concrete type of this expression node.
   /// Returns the result produced by the visitor's method.
-   accept<R>(ExprVisitor<R> visitor);
+  R accept<R>(ExprVisitor<R> visitor);
 }
 
 /// Defines the interface for visiting different types of [Expr] nodes.
