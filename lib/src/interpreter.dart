@@ -619,6 +619,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     globals.define(name, callable);
   }
 
+  void registerFunction(String name, Function(List args, Map kwargs) function) {
+    globals.define(name, NativeFunction((interp, args, kwargs) => function(args, kwargs)));
+  }
+
   /// Default print implementation writing to stdout, handling partial lines.
   void _printWithBuffer(s) {
     int n=s.lastIndexOf("\n");
