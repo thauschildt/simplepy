@@ -1,3 +1,6 @@
+## 1.2.3
+- reformat long lines etc
+
 ## 1.2.2
 - fix remaining linter warnings
 
