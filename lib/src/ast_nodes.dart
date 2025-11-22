@@ -833,8 +833,9 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
   /// Helper method to consistently format literal values in the output string.
   String _stringifyLiteral(Object? value) {
     if (value == null) return "None";
-    if (value is String)
+    if (value is String) {
       return "'${value.replaceAll("'", "\\'")}'"; // Show quotes for strings
+    }
     if (value is bool) return value ? "True" : "False";
     // Add other types if needed
     return value.toString();

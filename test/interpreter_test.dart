@@ -1275,22 +1275,22 @@ print(f"Bool True as Float: {True:.1f}")
       expect(
         result.output,
         equals(
-          "Default Precision: 123.456000\n" +
-              "Precision 2: 123.46\n" + // Check rounding
-              "Precision 0: 123\n" + // Check rounding
-              "Width 10 Prec 2:     123.46\n" +
-              "Width 10 Prec 2 Left: 123.46    \n" +
-              "Width 10 Prec 2 Center:   123.46  \n" + // Check spacing
-              "Width 10 Prec 2 Sign Pad:     123.46\n" +
-              "Width 10 Prec 2 Sign Pad Neg: -   123.46\n" +
-              "Fill Zero Width 10 Prec 2: 0000123.46\n" +
-              "Fill Underscore Width 10 Prec 2 Left: 123.46____\n" +
-              "Sign '+': +123.46\n" +
-              "Sign '+': -123.46\n" +
-              "Sign ' ':  123.46\n" +
-              "Sign ' ': -123.46\n" +
-              "Int as Float: 123.00\n" +
-              "Bool True as Float: 1.0\n",
+          "Default Precision: 123.456000\n"
+          "Precision 2: 123.46\n" // Check rounding
+          "Precision 0: 123\n" // Check rounding
+          "Width 10 Prec 2:     123.46\n"
+          "Width 10 Prec 2 Left: 123.46    \n"
+          "Width 10 Prec 2 Center:   123.46  \n" // Check spacing
+          "Width 10 Prec 2 Sign Pad:     123.46\n"
+          "Width 10 Prec 2 Sign Pad Neg: -   123.46\n"
+          "Fill Zero Width 10 Prec 2: 0000123.46\n"
+          "Fill Underscore Width 10 Prec 2 Left: 123.46____\n"
+          "Sign '+': +123.46\n"
+          "Sign '+': -123.46\n"
+          "Sign ' ':  123.46\n"
+          "Sign ' ': -123.46\n"
+          "Int as Float: 123.00\n"
+          "Bool True as Float: 1.0\n",
         ),
       );
       // Check error for non-numeric
@@ -1330,15 +1330,15 @@ print(f"None as String: {None}")
       expect(
         result.output,
         equals(
-          "Default: hello\n" +
-              "Spec s: hello\n" +
-              "Width 10: hello     \n" + // Left align
-              "Width 10 Right:      hello\n" +
-              "Width 10 Center:   hello   \n" + // Check spacing
-              "Fill Underscore Width 10: _____hello\n" +
-              "Number as String: 123\n" +
-              "Number as String Width 5:   123\n" + // Right aligned implicitly? Check _formatValue default align
-              "None as String: None\n",
+          "Default: hello\n"
+          "Spec s: hello\n"
+          "Width 10: hello     \n" // Left align
+          "Width 10 Right:      hello\n"
+          "Width 10 Center:   hello   \n" // Check spacing
+          "Fill Underscore Width 10: _____hello\n"
+          "Number as String: 123\n"
+          "Number as String Width 5:   123\n" // Right aligned implicitly? Check _formatValue default align
+          "None as String: None\n",
         ),
       );
       // Test width with fill/align on numbers formatted as string

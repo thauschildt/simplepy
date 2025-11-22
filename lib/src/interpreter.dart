@@ -77,8 +77,9 @@ class PyTuple {
     if (other is PyTuple) {
       if (tuple.length != other.tuple.length) return false;
       for (int i = 0; i < tuple.length; i++) {
-        if (!Interpreter.internalIsEqual(tuple[i], other.tuple[i]))
+        if (!Interpreter.internalIsEqual(tuple[i], other.tuple[i])) {
           return false;
+        }
       }
       return true;
     }
@@ -896,16 +897,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           "TypeError: 'base' argument must be an integer",
         );
       }
-      if (value is! String)
+      if (value is! String) {
         throw RuntimeError(
           builtInToken('int'),
           "TypeError: int() can't convert non-string with explicit base",
         );
-      if (base != 0 && (base < 2 || base > 36))
+      }
+      if (base != 0 && (base < 2 || base > 36)) {
         throw RuntimeError(
           builtInToken('int'),
           "ValueError: int() base must be >= 2 and <= 36, or 0",
         );
+      }
     }
 
     if (value is int && base == 10) return value; // Common case optimization
@@ -1072,10 +1075,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (positionalArgs.isEmpty) return PyList(<Object?>[]); // New empty list
 
     final iterable = positionalArgs[0];
-    if (iterable is PyList)
+    if (iterable is PyList) {
       return PyList(List.from(iterable.list)); // Return a shallow copy
-    if (iterable is String)
+    }
+    if (iterable is String) {
       return PyList(iterable.split('')); // List of characters
+    }
     if (iterable is Map) return PyList(iterable.keys.toList()); // List of keys
 
     // Check if it's an iterable result from range() which is already a List
@@ -1341,11 +1346,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNoKeywords('min', keywordArgs); // Key function not supported yet
-    if (positionalArgs.isEmpty)
+    if (positionalArgs.isEmpty) {
       throw RuntimeError(
         builtInToken('min'),
         "TypeError: min expected 1 argument, got 0",
       );
+    }
 
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
@@ -1368,11 +1374,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       valuesToCompare = positionalArgs;
     }
 
-    if (valuesToCompare.isEmpty)
+    if (valuesToCompare.isEmpty) {
       throw RuntimeError(
         builtInToken('min'),
         "ValueError: min() arg is an empty sequence",
       );
+    }
 
     Object? minValue = valuesToCompare.first;
     for (final value in valuesToCompare.skip(1)) {
@@ -1402,11 +1409,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Map<String, Object?> keywordArgs,
   ) {
     _checkNoKeywords('max', keywordArgs); // Key function not supported yet
-    if (positionalArgs.isEmpty)
+    if (positionalArgs.isEmpty) {
       throw RuntimeError(
         builtInToken('max'),
         "TypeError: max expected 1 argument, got 0",
       );
+    }
 
     Iterable<Object?>? valuesToCompare;
     if (positionalArgs.length == 1) {
@@ -1427,11 +1435,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       valuesToCompare = positionalArgs;
     }
 
-    if (valuesToCompare.isEmpty)
+    if (valuesToCompare.isEmpty) {
       throw RuntimeError(
         builtInToken('max'),
         "ValueError: max() arg is an empty sequence",
       );
+    }
 
     Object? maxValue = valuesToCompare.first;
     for (final value in valuesToCompare.skip(1)) {
@@ -1487,8 +1496,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         "TypeError: '${Interpreter.getTypeString(iterable)}' object is not iterable or not summable",
       );
     }
-    if (valuesToSum.isEmpty && start == 0)
+    if (valuesToSum.isEmpty && start == 0) {
       return 0; // Mimic python sum([]) == 0
+    }
 
     Object? currentSum = start;
     Token plusOperatorToken = Token(TokenType.PLUS, '+', null, 0, 0);
@@ -1555,11 +1565,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (object.isEmpty) return "set()";
       return '{${object.map(repr).join(', ')}}';
     }
-    if (object is Map)
+    if (object is Map) {
       return '{${object.entries.map((e) => '${repr(e.key)}: ${repr(e.value)}').join(', ')}}';
+    }
 
-    if (object is PyCallable)
+    if (object is PyCallable) {
       return object.toString(); // <fn ...>, <native fn>, <method...>
+    }
     if (object is PyClass) return "<class '${object.name}'>";
     if (object is PyInstance) {
       // TODO: call __repr__ when implemented
@@ -1719,8 +1731,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     } on ReturnValue catch (_) {
       // A ReturnValue exception should only be caught inside a function call.
       // If it reaches here, it's an error (return outside function).
-      if (errorCallback != null)
+      if (errorCallback != null) {
         errorCallback("SyntaxError: 'return' outside function");
+      }
       print(
         RuntimeError(
           Token(TokenType.RETURN, 'return', null, 0, 0),
@@ -2116,10 +2129,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     switch (operator.type) {
       case TokenType.STAR_EQUAL:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is PyList) && right is int)
+        if ((left is String || left is PyList) && right is int) {
           return _multiplySequence(left!, right, operator);
-        if (left is int && (right is String || right is List))
+        }
+        if (left is int && (right is String || right is List)) {
           return _multiplySequence(right!, left, operator);
+        }
         throw RuntimeError(
           operator,
           "Unsupported operand type(s) for *=: '${left?.runtimeType}' and '${right?.runtimeType}'",
@@ -2179,18 +2194,21 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Token bracket,
   ) {
     if (object is PyList) {
-      if (keyOrIndex is! int)
+      if (keyOrIndex is! int) {
         throw RuntimeError(bracket, "List indices must be integers.");
+      }
       int index = keyOrIndex;
       List l = object.list;
       if (index < 0) index += l.length;
-      if (index < 0 || index >= l.length)
+      if (index < 0 || index >= l.length) {
         throw RuntimeError(bracket, "List index out of range.");
+      }
       return l[index];
     }
     if (object is Map) {
-      if (!object.containsKey(keyOrIndex))
+      if (!object.containsKey(keyOrIndex)) {
         throw RuntimeError(bracket, "KeyError: ${stringify(keyOrIndex)}");
+      }
       return object[keyOrIndex];
     }
     throw RuntimeError(
@@ -2207,22 +2225,25 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Token bracket,
   ) {
     if (object is PyList) {
-      if (keyOrIndex is! int)
+      if (keyOrIndex is! int) {
         throw RuntimeError(bracket, "List indices must be integers.");
+      }
       int index = keyOrIndex;
       List l = object.list;
       if (index < 0) index += l.length;
-      if (index < 0 || index >= l.length)
+      if (index < 0 || index >= l.length) {
         throw RuntimeError(bracket, "List index out of range.");
+      }
       l[index] = value;
       return;
     }
     if (object is Map) {
-      if (!isHashable(keyOrIndex))
+      if (!isHashable(keyOrIndex)) {
         throw RuntimeError(
           bracket,
           "TypeError: unhashable type: '${keyOrIndex?.runtimeType ?? 'None'}'",
         );
+      }
       object[keyOrIndex] = value;
       return;
     }
@@ -2257,8 +2278,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.TILDE:
         if (operand is int) return -(operand + 1);
         // Python allows ~ on bool (True -> -2, False -> -1), but not on float
-        if (operand is bool)
+        if (operand is bool) {
           return operand ? -(1 + 1) : -(0 + 1); // results in -2 and -1
+        }
         throw RuntimeError(
           expr.operator,
           "TypeError: bad operand type for unary ~: '${operand?.runtimeType}'. Must be an integer or boolean.",
@@ -2309,10 +2331,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.PLUS:
         if (left is num && right is num) return left + right;
         if (left is String && right is String) return left + right;
-        if (left is PyList && right is PyList)
+        if (left is PyList && right is PyList) {
           return PyList([...left.list, ...right.list]);
-        if (left is PyTuple && right is PyTuple)
+        }
+        if (left is PyTuple && right is PyTuple) {
           return PyTuple([...left.tuple, ...right.tuple]);
+        }
         throw RuntimeError(
           operator,
           "TypeError: unsupported operand type(s) for +: '${getTypeString(left)}' and '${getTypeString(right)}'",
@@ -2337,10 +2361,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         return (left as num) ~/ (right as num);
       case TokenType.STAR:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is PyList) && right is int)
+        if ((left is String || left is PyList) && right is int) {
           return _multiplySequence(left!, right, operator);
-        if (left is int && (right is String || right is List))
+        }
+        if (left is int && (right is String || right is List)) {
           return _multiplySequence(right!, left, operator);
+        }
         throw RuntimeError(
           operator,
           "TypeError: unsupported operand type(s) for *: '${getTypeString(left)}' and '${getTypeString(right)}'",
@@ -2400,10 +2426,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           // Works for Lists (Tuples) and Strings
           // Simple linear search for 'in' on List/String
           // Note: String check is more efficient with contains
-          if (right is String)
+          if (right is String) {
             return right.contains(
               stringify(left),
             ); // Convert left to string for check
+          }
           List l =
               right is PyList
                   ? right.list
@@ -2827,10 +2854,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case 'f': // Float (fixed point)
         if (align == '') align = '>';
         if (value is bool) value = value ? 1.0 : 0.0;
-        if (value is! num)
+        if (value is! num) {
           throw FormatException(
             "Cannot format value of type '${getTypeString(value)}' with 'f'",
           );
+        }
         double numValue = (value is int) ? value.toDouble() : value as double;
         formattedValue = numValue.toStringAsFixed(precision);
         // Handle sign for float
@@ -3189,8 +3217,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
               break;
             }
           }
-          if (!keyFoundInB)
+          if (!keyFoundInB) {
             return false; // Key from 'a' not found in 'b' using deep equality
+          }
           // Recursively compare values using deep equality
           if (!internalIsEqual(a[keyA], valueBForKeyA)) return false;
         }

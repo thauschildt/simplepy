@@ -568,8 +568,9 @@ class Parser {
     // TODO: check correct order of positional, optional, *args, **kwargs
     do {
       // Use do-while because we checked COLON already, so at least one param expected if not empty
-      if (parameters.length >= 255)
+      if (parameters.length >= 255) {
         throw error(peek(), "Can't have more than 255 parameters.");
+      }
       if (match([TokenType.STAR_STAR])) {
         // **kwargs
         parsingOptional = false;
@@ -599,11 +600,12 @@ class Parser {
           parameters.add(OptionalParameter(paramName, defaultValue));
         } else {
           // Required
-          if (parsingOptional)
+          if (parsingOptional) {
             throw error(
               paramName,
               "Non-default argument follows default argument.",
             );
+          }
           parameters.add(RequiredParameter(paramName));
         }
       }
@@ -786,11 +788,12 @@ class Parser {
                 if (content[i] == '\\' && i + 1 < length) i++;
                 i++;
               }
-              if (i >= length)
+              if (i >= length) {
                 throw ParseError(
                   fstringToken,
                   "Unterminated string inside f-string expression.",
                 );
+              }
             }
             i++;
           } // End of the inner loop looking for '}'
@@ -946,8 +949,9 @@ class Parser {
       List<Expr> elements = [];
       if (!check(TokenType.RIGHT_BRACKET)) {
         do {
-          if (check(TokenType.RIGHT_BRACKET))
+          if (check(TokenType.RIGHT_BRACKET)) {
             break; // Allow trailing comma: [1, 2, ]
+          }
           elements.add(expression());
         } while (match([TokenType.COMMA]));
       }
@@ -1134,7 +1138,7 @@ class Parser {
 
   /// Returns the current token without consuming it.
   Token previous() {
-    if (current == 0)
+    if (current == 0) {
       return Token(
         TokenType.EOF,
         "",
@@ -1142,6 +1146,7 @@ class Parser {
         0,
         0,
       ); // Should not happen in normal flow
+    }
     return tokens[current - 1];
   }
 
