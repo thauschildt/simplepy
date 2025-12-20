@@ -17,6 +17,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
   `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `sum()`
   - classes (no class attributes, no multiple inheritance)
+  - `global` and `nonlocal` variables
 
 
   Some more features might be added soon, but this will never become a full python interpreter.

@@ -898,24 +898,24 @@ print(f"Int as Float: {123:.2f}")
 print(f"Bool True as Float: {True:.1f}")
 ''');
         expect(result.error, isNull, reason: result.error?.toString());
-        expect(result.output, equals(
-            "Default Precision: 123.456000\n" +
-            "Precision 2: 123.46\n" + // Check rounding
-            "Precision 0: 123\n" +    // Check rounding
-            "Width 10 Prec 2:     123.46\n" +
-            "Width 10 Prec 2 Left: 123.46    \n" +
-            "Width 10 Prec 2 Center:   123.46  \n" + // Check spacing
-            "Width 10 Prec 2 Sign Pad:     123.46\n" +
-            "Width 10 Prec 2 Sign Pad Neg: -   123.46\n" +
-            "Fill Zero Width 10 Prec 2: 0000123.46\n" +
-            "Fill Underscore Width 10 Prec 2 Left: 123.46____\n" +
-            "Sign '+': +123.46\n" +
-            "Sign '+': -123.46\n" +
-            "Sign ' ':  123.46\n" +
-            "Sign ' ': -123.46\n" +
-            "Int as Float: 123.00\n" +
-            "Bool True as Float: 1.0\n"
-            ));
+        expect(result.output, equals("""
+Default Precision: 123.456000
+Precision 2: 123.46
+Precision 0: 123
+Width 10 Prec 2:     123.46
+Width 10 Prec 2 Left: 123.46    
+Width 10 Prec 2 Center:   123.46  
+Width 10 Prec 2 Sign Pad:     123.46
+Width 10 Prec 2 Sign Pad Neg: -   123.46
+Fill Zero Width 10 Prec 2: 0000123.46
+Fill Underscore Width 10 Prec 2 Left: 123.46____
+Sign '+': +123.46
+Sign '+': -123.46
+Sign ' ':  123.46
+Sign ' ': -123.46
+Int as Float: 123.00
+Bool True as Float: 1.0
+"""));
         // Check error for non-numeric
         expect(runCode("print(f\"{'abc':f}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Cannot format value of type 'str' with 'f'")));
         expect(runCode("print(f'{None:.2f}')").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Cannot format value of type 'NoneType' with 'f'")));
@@ -937,17 +937,17 @@ print(f"Number as String Width 5: {num:>5}")
 print(f"None as String: {None}")
 ''');
        expect(result.error, isNull, reason: result.error?.toString());
-       expect(result.output, equals(
-            "Default: hello\n" +
-            "Spec s: hello\n" +
-            "Width 10: hello     \n" + // Left align
-            "Width 10 Right:      hello\n" +
-            "Width 10 Center:   hello   \n" + // Check spacing
-            "Fill Underscore Width 10: _____hello\n" +
-            "Number as String: 123\n"+
-            "Number as String Width 5:   123\n"+ // Right aligned implicitly? Check _formatValue default align
-            "None as String: None\n"
-       ));
+       expect(result.output, equals("""
+Default: hello
+Spec s: hello
+Width 10: hello     
+Width 10 Right:      hello
+Width 10 Center:   hello   
+Fill Underscore Width 10: _____hello
+Number as String: 123
+Number as String Width 5:   123
+None as String: None
+"""));
        // Test width with fill/align on numbers formatted as string
        expect(runCode("print(f'{123:_^7}')").output, equals("__123__\n"));
     });
@@ -979,7 +979,160 @@ print(f"Item count: {len(items):03d}, Average: {x / 2:^10.2f}")
        expect(runCode("print(f\"{'text':d}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Error formatting value")));
        //expect(runCode("print(f\"{123:x.2f}\")").error, isA<RuntimeError>().having((e)=>e.message, 'message', contains("Error formatting value"))); // Invalid combination
     });
-
-
   }); // end of fstring tests
+
+  group('global / nonlocal', () {
+
+    test('global read access', () {
+      final result = runCode(r'''
+x = 10
+def foo():
+    print(x)
+foo()
+print(x)
+''');
+      expect(result.output, equals("10\n10\n"));
+    });
+
+    test('global read access', () {
+      final result = runCode(r'''
+x = 10
+def foo():
+    global x
+    x = 20
+foo()
+print(x)
+''');
+      expect(result.output, equals("20\n"));
+    });  
+
+    test('multiple globals', () {
+      final result = runCode(r'''
+a = 1
+b = 2
+def foo():
+    global a, b
+    a = 10
+    b = 20
+foo()
+print(a, b)
+''');
+      expect(result.output, equals("10 20\n"));
+    });  
+
+    test('nonlocal', () {
+      final result = runCode(r'''
+def outer():
+    x = 10
+    def inner():
+        nonlocal x
+        x = 20
+    inner()
+    print(x)
+outer()
+''');
+      expect(result.output, equals("20\n"));
+    });  
+
+    test('nonlocal in double nested functions', () {
+      final result = runCode(r'''
+def outer():
+    x = 10
+    def middle():
+        def inner():
+            nonlocal x
+            x = 30
+        inner()
+        print(x)
+    middle()
+    print(x)
+outer()
+''');
+      expect(result.output, equals("30\n30\n"));
+    });  
+
+    test('nonlocal - missing outer definition', () {
+      final result = runCode(r'''
+x = 10
+def foo():
+    global x
+    def bar():
+        nonlocal x
+        x = 20
+    bar()
+foo()
+''');
+      expect(result.error, isA<RuntimeError>().having((e) => e.message, 'message', contains('nonlocal declaration of \'x\' refers to a global variable')));
+    });  
+
+    test('nonlocal missing in enclosing scope', () {
+      final result = runCode(r'''
+def foo():
+    def bar():
+        nonlocal y
+        y = 20
+    bar()
+foo()
+''');
+      expect(result.error, isA<RuntimeError>().having((e) => e.message, 'message', contains('not found in enclosing')));
+    });  
+
+    test('undefined global', () {
+      final result = runCode(r'''
+def foo():
+    x = 10
+    print(x)
+foo()
+print(x)
+''');
+      expect(result.error, isA<RuntimeError>().having((e) => e.message, 'message', contains('Undefined variable')));
+    });  
+
+    test('ignore global', () {
+      final result = runCode(r'''
+global x  # should be ignored
+x = 10
+print(x)
+''');
+      expect(result.output, equals("10\n"));
+    });  
+    test('nonlocal not within function', () {
+      final result = runCode(r'''
+nonlocal x
+x = 10
+''');
+      expect(result.error, isA<RuntimeError>().having((e) => e.message, 'message', contains('nonlocal declaration not allowed at module level')));
+    });  
+
+    test('nonlocal missing ', () {
+      final result = runCode(r'''
+def foo():
+    nonlocal y 
+    y = 20
+foo()
+''');
+      expect(result.error, isA<RuntimeError>().having((e) => e.message, 'message', contains('not found in enclosing scope')));
+    });  
+
+    test('mix of global and nonlocal', () {
+      final result = runCode(r'''
+z = 1
+def outer():
+    x = 10
+    def inner():
+        global z
+        nonlocal x
+        y = 20  # local
+        z = 30  # change global
+        x = 40  # change nonlocal
+        print(x, y, z)  # should print 40 20 30
+    inner()
+    print(x)  # should print 40
+outer()
+print(z)     # should print 30
+''');
+      expect(result.output, equals("40 20 30\n40\n30\n"));
+    });
+  
+   }); // end of global/nonlocal tests
 }

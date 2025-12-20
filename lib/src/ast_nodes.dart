@@ -348,6 +348,10 @@ abstract class StmtVisitor<R> {
   R visitExpressionStmt(ExpressionStmt stmt);
   /// Visits a [FunctionStmt] node (`def` statement).
   R visitFunctionStmt(FunctionStmt stmt);
+  /// Visits a [GlobalStmt] node (`global` statement).
+  R visitGlobalStmt(GlobalStmt stmt);
+  /// Visits a [NonlocalStmt] node (`nonlocal` statement).
+  R visitNonlocalStmt(NonlocalStmt stmt);
   /// Visits a [ClassStmt] node (`class` statement).
   R visitClassStmt(ClassStmt stmt); // <<
   /// Visits an [IfStmt] node (`if`/`elif`/`else` statement).
@@ -439,6 +443,20 @@ class FunctionStmt extends Stmt {
   FunctionStmt(this.name, this.params, this.body);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitFunctionStmt(this);
+}
+
+class GlobalStmt implements Stmt {
+  final List<Token> names; // Liste der Variablennamen
+  GlobalStmt(this.names);
+  @override
+  R accept<R>(StmtVisitor<R> visitor) => visitor.visitGlobalStmt(this);
+}
+
+class NonlocalStmt implements Stmt {
+  final List<Token> names; // Liste der Variablennamen
+  NonlocalStmt(this.names);
+  @override
+  R accept<R>(StmtVisitor<R> visitor) => visitor.visitNonlocalStmt(this);
 }
 
 /// Represents a `pass` statement, which performs no operation.
@@ -669,6 +687,24 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     // Ensure initial indentation for body if not empty
     var indentedBody = body.isNotEmpty ? "    $body" : "";
     return "def ${stmt.name.lexeme}(${paramStrings.join(', ')}):\n$indentedBody\n";
+  }
+
+  @override
+  String visitGlobalStmt(GlobalStmt stmt) {
+    List <String> names=[];
+    for (Token t in stmt.names) {
+      names.add(t.lexeme);
+    }
+    return "global ${names.join(', ')}\n";
+  }
+
+  @override
+  String visitNonlocalStmt(NonlocalStmt stmt) {
+    List <String> names=[];
+    for (Token t in stmt.names) {
+      names.add(t.lexeme);
+    }
+    return "nonlocal ${names.join(', ')}\n";
   }
 
   @override

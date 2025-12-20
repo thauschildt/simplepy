@@ -1,3 +1,6 @@
+## 1.3.0 - Unreleased
+- added `global`and `nonlocal`statements
+
 ## 1.2.1
 - improve package description and fix linter warnings
 

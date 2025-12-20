@@ -161,13 +161,15 @@ class Parser {
 
         if (match([TokenType.STAR_STAR])) {
           // **kwargs
-          if (parsingKwargs)
+          if (parsingKwargs) {
             error(previous(), "Multiple **kwargs parameters are not allowed.");
-          if (parsingArgs)
+          }
+          if (parsingArgs) {
             error(
               previous(),
               "Cannot have **kwargs after *args.",
             ); // Correction: Should be allowed
+          }
           // Python allows **kwargs anytime after non-keywords.
           // Let's enforce it comes last for simplicity.
           if (parameters.any((p) => p is! StarStarKwargsParameter)) {
@@ -207,10 +209,12 @@ class Parser {
           parameters.add(StarStarKwargsParameter(paramName));
         } else if (match([TokenType.STAR])) {
           // *args
-          if (parsingArgs)
+          if (parsingArgs) {
             error(previous(), "Multiple *args parameters are not allowed.");
-          if (parsingKwargs)
+          }
+          if (parsingKwargs) {
             error(previous(), "Cannot have *args after **kwargs.");
+          }
 
           // Simplified: Ensure *args comes before **kwargs and after regular args
           if (parameters.any((p) => p is StarStarKwargsParameter)) {
@@ -277,6 +281,8 @@ class Parser {
     if (match([TokenType.PASS])) return passStatement();
     if (match([TokenType.BREAK])) return breakStatement();
     if (match([TokenType.CONTINUE])) return continueStatement();
+    if (match([TokenType.GLOBAL])) return globalStatement();
+    if (match([TokenType.NONLOCAL])) return nonlocalStatement(); 
     // Note: Block statements are handled within constructs like if/while/for/def
     return expressionStatement();
   }
@@ -296,8 +302,9 @@ class Parser {
       while (match([TokenType.NEWLINE])) {
         /* consume */
       }
-      if (check(TokenType.DEDENT) || isAtEnd())
+      if (check(TokenType.DEDENT) || isAtEnd()) {
         break; // Re-check after skipping newlines
+      }
 
       var stmt = declaration(); // Allow function defs inside blocks too
       if (stmt != null) {
@@ -398,6 +405,28 @@ class Parser {
   /// continueStmt ::= "continue" ;
   Stmt continueStatement() {
     return ContinueStmt(previous());
+  }
+
+  /// Parses a global statement.
+  /// globalStmt ::= "global" IDENTIFIER ("," IDENTIFIER)* ;
+  Stmt globalStatement() {
+    List<Token> names = [];
+    do {
+      names.add(consume(TokenType.IDENTIFIER, "Expect variable name after 'global'."));
+    } while (match([TokenType.COMMA]));
+    consume(TokenType.NEWLINE, "Expect newline after 'global' statement.");
+    return GlobalStmt(names);
+  }
+
+  /// Parses a nonlocal statement.
+  /// nonlocalStmt ::= "nonlocal" IDENTIFIER ("," IDENTIFIER)* ;
+  Stmt nonlocalStatement() {
+    List<Token> names = [];
+    do {
+      names.add(consume(TokenType.IDENTIFIER, "Expect variable name after 'nonlocal'."));
+    } while (match([TokenType.COMMA]));
+    consume(TokenType.NEWLINE, "Expect newline after 'nonlocal' statement.");
+    return NonlocalStmt(names);
   }
 
   /// Parses an expression statement.
