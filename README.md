@@ -11,7 +11,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - assignments: `= += -= *= /= **= //= %=`
   - comparisons: `== > >= < <= !=`
   - boolean operators: `and`, `or`, `not`
-  - `if`, `else`, `elif` (newline after colon is required, in loops and function definitions as well)
+  - `if`, `else`, `elif`
   - `for` loops, `while` loops
   - functions (default arguments, *args, **kwargs are partially implemented), `lambda` functions
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
@@ -37,6 +37,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - async functions, generators
   - `input()` and some other built-in functions
   - complex numbers
+  - multiple statements in one line separated by `;`
   - anything else not mentioned as available
 
 ## Usage

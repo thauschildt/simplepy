@@ -123,7 +123,7 @@ print(y)
       expect(result.output, equals('10\n5\n'));
     });
 
-     test('should execute if/else statements correctly', () {
+    test('should execute if/else statements correctly', () {
       final source = '''
 val = -5
 if val > 0:
@@ -136,6 +136,53 @@ else:
       final result = runCode(source);
       expect(result.error, isNull);
       expect(result.output, equals('negative\n'));
+    });
+
+    test("single-line if-statement", () {
+      final result = runCode("""
+if 1 == 0: print('1')
+if 1 == 1: print('2')
+""");
+      expect(result.output, equals('2\n'));
+    });
+
+    test("single-line if/else-statement", () {
+      final result = runCode("""
+if 1 == 0: print('1')
+else: print('2')
+if 1 == 1: print('1')
+else: print('2')
+""");
+      expect(result.output, equals('2\n1\n'));
+    });
+
+    test("single-line if/elif/else-statement", () {
+      final result = runCode("""
+if 1 == 0: print('1')
+elif 2 == 0: print('2')
+else: print('3')
+if 1 == 0: print('1')
+elif 2 == 2: print('2')
+else: print('3')
+if 1 == 1: print('1')
+elif 2 == 0: print('2')
+else: print('3')
+""");
+      expect(result.output, equals('3\n2\n1\n'));
+    });
+
+    test("single-line if/else with missing newline", () {
+      final result = runCode("""
+if 1 == 0: print('1') else: print('2')
+""");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+    });
+
+    test("single-line if with missing newline", () {
+      final result = runCode("""
+if 1 == 0: print('1') print('2')
+""");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
     });
 
      test('should execute while loop with break', () {
@@ -153,7 +200,23 @@ print("done")
       expect(result.output, equals('0\n1\n2\ndone\n'));
     });
 
-     test('should execute for loop with range', () {
+    test("single-line while-loop", () {
+      final result = runCode("""
+x=1
+while x < 10: x+=1
+print(x)
+""");
+      expect(result.output, equals('10\n'));
+    });
+
+    test("single-line while-loop with missing newline", () {
+      final result = runCode("""
+while x < 10: print(x) x
+""");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+    });
+
+    test('should execute for loop with range', () {
       final source = '''
 total = 0
 for x in range(3):
@@ -165,7 +228,21 @@ print(total)
       expect(result.output.trim(), equals('3')); // 0 + 1 + 2
     });
 
-     test('should define and call function with return', () {
+    test("single-line for-loop", () {
+      final result = runCode("""
+for x in [1, 2]: print(x)
+""");
+      expect(result.output, equals('1\n2\n'));
+    });
+
+    test("single-line for-loop with missing newline", () {
+      final result = runCode("""
+for x in [1, 2]: print(x) y
+""");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+    });
+
+    test('should define and call function with return', () {
       final source = '''
 def multiply(a, b):
   return a * b
@@ -177,6 +254,21 @@ print(result)
       expect(result.error, isNull);
       expect(result.output.trim(), equals('20'));
       expect(result.globals.get(Token(TokenType.IDENTIFIER, 'result', null, 0, 0)), equals(20));
+    });
+
+    test("single-line function-def", () {
+      final result = runCode("""
+def f(): return 42
+print(f())
+""");
+      expect(result.output, equals('42\n'));
+    });
+
+    test("single-line function-def with missing newline", () {
+      final result = runCode("""
+def f(): x=2 return x
+""");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
     });
 
     test('should handle function scope (closures)', () {

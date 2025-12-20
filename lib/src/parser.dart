@@ -265,8 +265,16 @@ class Parser {
     consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
     consume(TokenType.COLON, "Expect ':' before $kind body.");
 
-    // Expect NEWLINE + INDENT to start block
-    List<Stmt> body = block();
+    List<Stmt> body;
+    if (peek().type == TokenType.NEWLINE) {
+      body = block(); // standard function block
+    } else {
+      // single-line function def
+      body = [statement()];
+      if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
+        throw error(peek(), "invalid syntax");
+      }
+    }
     return FunctionStmt(name, parameters, body); // Pass the new list
   }
 
@@ -331,20 +339,48 @@ class Parser {
   Stmt ifStatement() {
     Expr condition = expression();
     consume(TokenType.COLON, "Expect ':' after if condition.");
-    Stmt thenBranch = BlockStmt(block()); // Use BlockStmt explicitly
-
+    Stmt thenBranch;
+    if (peek().type == TokenType.NEWLINE) {
+      thenBranch = BlockStmt(block()); // standard block
+    } else {
+      thenBranch = BlockStmt([statement()]); // single-line statement as block with one statement
+      if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
+        throw error(peek(), "invalid syntax.");
+      }
+      if (peek().type == TokenType.NEWLINE) {
+        consume(TokenType.NEWLINE, 'invalid syntax');
+      }
+    }
     List<ElifBranch> elifBranches = [];
     while (match([TokenType.ELIF])) {
       Expr elifCondition = expression();
       consume(TokenType.COLON, "Expect ':' after elif condition.");
-      Stmt elifThenBranch = BlockStmt(block()); // Use BlockStmt explicitly
+      Stmt elifThenBranch;
+      if (peek().type == TokenType.NEWLINE) {
+        elifThenBranch = BlockStmt(block());
+      } else {
+        elifThenBranch = BlockStmt([statement()]);
+        if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
+          throw error(peek(), "invalid syntax");
+        }
+        if (peek().type == TokenType.NEWLINE) {
+          consume(TokenType.NEWLINE, 'invalid syntax');
+        }
+      }
       elifBranches.add(ElifBranch(elifCondition, elifThenBranch));
     }
 
     Stmt? elseBranch;
     if (match([TokenType.ELSE])) {
       consume(TokenType.COLON, "Expect ':' after else.");
-      elseBranch = BlockStmt(block()); // Use BlockStmt explicitly
+      if (peek().type == TokenType.NEWLINE) {
+        elseBranch = BlockStmt(block());
+      } else {
+        elseBranch = BlockStmt([statement()]);
+        if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
+          throw error(peek(), "invalid syntax");
+        }
+      }
     }
 
     // Consume trailing newline automatically handled by main parsing loop or block parsing
@@ -371,7 +407,16 @@ class Parser {
   Stmt whileStatement() {
     Expr condition = expression();
     consume(TokenType.COLON, "Expect ':' after while condition.");
-    Stmt body = BlockStmt(block()); // Use BlockStmt explicitly
+    Stmt body;
+    if (peek().type == TokenType.NEWLINE) {
+      body = BlockStmt(block()); // standard block
+    } else {
+      // single-line body
+      body = BlockStmt([statement()]);
+      if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
+        throw error(peek(), "invalid syntax");
+      }
+    }
     return WhileStmt(condition, body);
   }
 
@@ -385,7 +430,16 @@ class Parser {
     consume(TokenType.IN, "Expect 'in' after variable.");
     Expr iterable = expression(); // e.g., range(5) or a list variable
     consume(TokenType.COLON, "Expect ':' after iterable.");
-    Stmt body = BlockStmt(block()); // Use BlockStmt explicitly
+    Stmt body;
+    if (peek().type == TokenType.NEWLINE) {
+      body = BlockStmt(block()); // standard block
+    } else {
+      // single-line body
+      body = BlockStmt([statement()]);
+      if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
+        throw error(peek(), "invalid syntax");
+      }
+    }
     return ForStmt(variable, iterable, body);
   }
 
