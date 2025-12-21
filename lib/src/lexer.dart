@@ -138,6 +138,8 @@ class Lexer {
   /// Used to detect [TokenType.INDENT] and [TokenType.DEDENT]. Starts with 0.
   List<int> indentStack = [0];
 
+  int _openParens = 0; // counter for opened parentheses ((), [], {})
+
   /// A map of reserved words to their corresponding [TokenType].
   static final Map<String, TokenType> keywords = {
     'if': TokenType.IF,
@@ -210,12 +212,12 @@ class Lexer {
 
     String c = advance();
     switch (c) {
-      case '(': addToken(TokenType.LEFT_PAREN); break;
-      case ')': addToken(TokenType.RIGHT_PAREN); break;
-      case '[': addToken(TokenType.LEFT_BRACKET); break;
-      case ']': addToken(TokenType.RIGHT_BRACKET); break;
-      case '{': addToken(TokenType.LEFT_BRACE); break;
-      case '}': addToken(TokenType.RIGHT_BRACE); break;
+      case '(': _openParens++; addToken(TokenType.LEFT_PAREN); break;
+      case ')': _openParens--; addToken(TokenType.RIGHT_PAREN); break;
+      case '[': _openParens++; addToken(TokenType.LEFT_BRACKET); break;
+      case ']': _openParens--; addToken(TokenType.RIGHT_BRACKET); break;
+      case '{': _openParens++; addToken(TokenType.LEFT_BRACE); break;
+      case '}': _openParens--; addToken(TokenType.RIGHT_BRACE); break;
       case ',': addToken(TokenType.COMMA); break;
       case '.': if (isDigit(peek())) {
           current--; // Go back to the '.'
@@ -302,13 +304,13 @@ class Lexer {
       case '\t':
         // Ignore other whitespace unless it's at the start of a line (handled by handleIndentation)
         break;
-
       case '\n':
         line++;
         lineStart = current;
-        handleIndentation(); // Check indentation on new lines
+        if (_openParens == 0) {
+          handleIndentation(); // Check indentation on new lines
+        }
         break;
-
       case '"':
       case "'":
         string(c);

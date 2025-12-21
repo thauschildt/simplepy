@@ -1204,7 +1204,7 @@ def foo():
 foo()
 ''');
       expect(result.error, isA<RuntimeError>().having((e) => e.message, 'message', contains('not found in enclosing scope')));
-    });  
+    });
 
     test('mix of global and nonlocal', () {
       final result = runCode(r'''
@@ -1225,6 +1225,47 @@ print(z)     # should print 30
 ''');
       expect(result.output, equals("40 20 30\n40\n30\n"));
     });
-  
-   }); // end of global/nonlocal tests
+  });
+   
+  group('line continuation', () {
+    test('expression can be split into 2 lines between ()', () {
+      final result = runCode(r'''
+x=(1+
+2*3)
+print(x)
+  ''');
+      expect(result.output, equals("7\n"));
+    });
+
+    test('expression cannot be split after () is closed', () {
+      final result = runCode(r'''
+  x=(1+2)
+  *3
+  ''');
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Expect expression')));
+    });
+
+    test('function call can be split into multiple lines before () is closed', () {
+      final result = runCode(r'''
+print(1,
+2
+,""
+)
+''');
+      expect(result.output, equals("1 2 \n"));
+    });
+
+    test('list and dict creation can be split into multiple lines between [] or {}', () {
+      final result = runCode(r'''
+l=[1,2
+  ,3]
+d={"x":
+    [1,
+  2]}
+print(l,d)
+''');
+      expect(result.output, equals("[1, 2, 3] {'x': [1, 2]}\n"));
+    });
+  });
+  // end of global/nonlocal tests
 }
