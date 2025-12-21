@@ -175,14 +175,14 @@ else: print('3')
       final result = runCode("""
 if 1 == 0: print('1') else: print('2')
 """);
-      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Invalid syntax')));
     });
 
     test("single-line if with missing newline", () {
       final result = runCode("""
 if 1 == 0: print('1') print('2')
 """);
-      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Invalid syntax')));
     });
 
      test('should execute while loop with break', () {
@@ -213,7 +213,7 @@ print(x)
       final result = runCode("""
 while x < 10: print(x) x
 """);
-      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Invalid syntax. Unexpected token')));
     });
 
     test('should execute for loop with range', () {
@@ -239,7 +239,7 @@ for x in [1, 2]: print(x)
       final result = runCode("""
 for x in [1, 2]: print(x) y
 """);
-      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Invalid syntax. Unexpected token')));
     });
 
     test('should define and call function with return', () {
@@ -268,7 +268,7 @@ print(f())
       final result = runCode("""
 def f(): x=2 return x
 """);
-      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('invalid syntax')));
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Invalid syntax. Unexpected token')));
     });
 
     test('should handle function scope (closures)', () {
@@ -1063,8 +1063,8 @@ print(f"Item count: {len(items):03d}, Average: {x / 2:^10.2f}")
       expect(runCode('f"Value: }"').error, isA<ParseError>().having((e)=>e.message, 'message', contains("single '}' is not allowed")));
       expect(runCode('f"Value: {1:}"').error, isNull); // Empty format specifier is allowed
       // Unterminated f-string (Lexer error, might not be caught cleanly by runCode)
-      final resultUnterm = runCode('f"abc');
-      expect(resultUnterm.error, isA<LexerError>().having((e)=>e.message, 'message', contains("Unterminated f-string")));
+      final result = runCode('f"abc');
+      expect(result.error, isA<LexerError>().having((e)=>e.message, 'message', contains("Unterminated f-string")));
     });
 
     test('F-String Formatting Errors (Runtime Time)', () {
@@ -1312,5 +1312,34 @@ b\'\'\'
       expect(result.error, isA<LexerError>().having((e) => e.message, 'message', contains('Unterminated multiline')));
     });
   });
+
+  group('string concatenation', () {
+    test('concatenate 2 strings', () {
+      final result = runCode(r'''
+x="a" " b"
+print(x)
+''');
+      expect(result.output, equals("a b\n"));
+    });
+
+    test('concatenate 3 strings (implicit and +)', () {
+      final result = runCode(r'''
+x="a" " b" +"c"
+print(x)
+''');
+      expect(result.output, equals("a bc\n"));
+    });
+
+    test('concatenate multiline and f-strings', () {
+      final result = runCode(r'''
+n=42
+x="""a
+b""" f' {n}'
+print(x)
+''');
+      expect(result.output, equals("a\nb 42\n"));
+    });
+  });
+
   // end of global/nonlocal tests
 }

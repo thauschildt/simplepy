@@ -70,7 +70,11 @@ class Parser {
           synchronize(); // Ensure we are at a recovery point
         }
       } on ParseError catch (e) {
-        print(e);
+        if (errorCallback!=null) {
+          errorCallback!(e.toString());
+        } else {
+          print(e.toString());
+        }
         synchronize();
       }
       // Ensure we consume trailing newlines after a statement/block
@@ -88,17 +92,9 @@ class Parser {
   /// Parses a declaration, which can be a function definition or any other statement.
   /// declaration ::= classDecl | functionDecl | statement ;
   Stmt? declaration() {
-    try {
-      if (match([TokenType.CLASS])) return classDeclaration();
-      if (match([TokenType.DEF])) return functionDeclaration("function");
-      return statement();
-    } catch (e) {
-      // If a ParseError occurs within a production rule, it's caught here
-      // (or by the main loop if it bubbles up). Call synchronize.
-      print(e); // Error already printed by main loop or specific rule
-      synchronize();
-      return null; // Indicate failure to the main loop
-    }
+    if (match([TokenType.CLASS])) return classDeclaration();
+    if (match([TokenType.DEF])) return functionDeclaration("function");
+    return statement();
   }
 
   /// Parses a class definition.
@@ -282,17 +278,35 @@ class Parser {
   /// statement ::= ifStmt | returnStmt | whileStmt | forStmt | passStmt
   ///             | breakStmt | continueStmt | exprStmt ;
   Stmt statement() {
-    if (match([TokenType.IF])) return ifStatement();
-    if (match([TokenType.RETURN])) return returnStatement();
-    if (match([TokenType.WHILE])) return whileStatement();
-    if (match([TokenType.FOR])) return forStatement();
-    if (match([TokenType.PASS])) return passStatement();
-    if (match([TokenType.BREAK])) return breakStatement();
-    if (match([TokenType.CONTINUE])) return continueStatement();
-    if (match([TokenType.GLOBAL])) return globalStatement();
-    if (match([TokenType.NONLOCAL])) return nonlocalStatement(); 
-    // Note: Block statements are handled within constructs like if/while/for/def
-    return expressionStatement();
+    Stmt? stmt;
+    Token token = peek();
+    if (match([TokenType.IF])) {
+      stmt = ifStatement();
+    } else if (match([TokenType.RETURN])) {
+      stmt = returnStatement();
+    } else if (match([TokenType.WHILE])) {
+      stmt = whileStatement();
+    } else if (match([TokenType.FOR])) {
+      stmt = forStatement();
+    } else if (match([TokenType.PASS])) {
+      stmt = passStatement();
+    } else if (match([TokenType.BREAK])) {
+      stmt = breakStatement();
+    } else if (match([TokenType.CONTINUE])) {
+      stmt = continueStatement();
+    } else if (match([TokenType.GLOBAL])) {
+      stmt = globalStatement();
+    } else if (match([TokenType.NONLOCAL])) {
+      stmt = nonlocalStatement(); 
+    } else {
+      stmt = expressionStatement();
+    }
+    if (![TokenType.IF, TokenType.WHILE, TokenType.FOR].contains(token.type)) {
+      // Check if there is no extra token after a statement.
+      // In case of if, while, for this is done in the specific parsing methods.
+      _ensureEndOfStatement();
+    }
+    return stmt;
   }
 
   /// Parses a block of statements, typically following a colon (:).
@@ -416,6 +430,9 @@ class Parser {
       if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
         throw error(peek(), "invalid syntax");
       }
+      if (peek().type == TokenType.NEWLINE) {
+        consume(TokenType.NEWLINE,'');
+      }
     }
     return WhileStmt(condition, body);
   }
@@ -438,6 +455,9 @@ class Parser {
       body = BlockStmt([statement()]);
       if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
         throw error(peek(), "invalid syntax");
+      }
+      if (peek().type == TokenType.NEWLINE) {
+        consume(TokenType.NEWLINE,'');
       }
     }
     return ForStmt(variable, iterable, body);
@@ -468,7 +488,6 @@ class Parser {
     do {
       names.add(consume(TokenType.IDENTIFIER, "Expect variable name after 'global'."));
     } while (match([TokenType.COMMA]));
-    consume(TokenType.NEWLINE, "Expect newline after 'global' statement.");
     return GlobalStmt(names);
   }
 
@@ -479,9 +498,14 @@ class Parser {
     do {
       names.add(consume(TokenType.IDENTIFIER, "Expect variable name after 'nonlocal'."));
     } while (match([TokenType.COMMA]));
-    consume(TokenType.NEWLINE, "Expect newline after 'nonlocal' statement.");
     return NonlocalStmt(names);
   }
+
+  void _ensureEndOfStatement() {
+  if (!isAtEnd() && ![TokenType.NEWLINE, TokenType.DEDENT, TokenType.EOF].contains(peek().type)) {
+    throw error(peek(), "Invalid syntax. Unexpected token after statement.");
+  }
+}
 
   /// Parses an expression statement.
   /// exprStmt ::= expression ;
@@ -931,8 +955,49 @@ class Parser {
     if (match([TokenType.TRUE])) return LiteralExpr(true);
     if (match([TokenType.NONE])) return LiteralExpr(null);
 
-    if (match([TokenType.NUMBER, TokenType.STRING])) {
+    if (match([TokenType.NUMBER])) {
       return LiteralExpr(previous().literal);
+    }
+    List<dynamic> stringParts = [];
+    bool hasFString = false;
+
+    // first token: String oder F-String
+    if (match([TokenType.STRING, TokenType.F_STRING])) {
+      Token token = previous();
+      if (token.type == TokenType.F_STRING) {
+        hasFString = true;
+        stringParts.add(_parseFStringContent(token));
+      } else {
+        stringParts.add(token.literal as String);
+      }
+
+      // Sammle weitere aufeinanderfolgende String/F-String-Tokens
+      while (match([TokenType.STRING, TokenType.F_STRING])) {
+        Token nextToken = previous();
+        if (nextToken.type == TokenType.F_STRING) {
+          hasFString = true;
+          stringParts.add(_parseFStringContent(nextToken));
+        } else {
+          stringParts.add(nextToken.literal as String);
+        }
+      }
+
+      // If one or more f-strings are contained, create an FStringExpr from all parts
+      if (hasFString) {
+        // Flatten alls string and f-string parts into a list
+        List<FStringPart> allParts = [];
+        for (var part in stringParts) {
+          if (part is String) {
+            allParts.add(FStringLiteralPart(part));
+          } else if (part is List<FStringPart>) {
+            allParts.addAll(part);
+          }
+        }
+        return FStringExpr(previous(), allParts);
+      } else {
+        // only standard strings -> concatenate
+        return LiteralExpr(stringParts.join());
+      }
     }
     if (match([TokenType.SUPER])) {
         Token keyword = previous();
@@ -1045,24 +1110,11 @@ class Parser {
       return VariableExpr(previous());
     }
 
-    // --- F-String Handling ---
-    if (match([TokenType.F_STRING])) {
-      Token fstringToken = previous();
-      try {
-        List<FStringPart> parts = _parseFStringContent(fstringToken);
-        return FStringExpr(fstringToken, parts);
-      } on ParseError catch(e) {
-        // Re-throw with better context if possible, or just throw
-        throw error(fstringToken, "Invalid f-string syntax: ${e.message}");
-      } catch (e) {
-        throw error(fstringToken, "Error parsing f-string content: $e");
-      }
-    }
-    
     // Error: Expect expression
     print("throw Error");
     throw error(peek(), "Expect expression.");
   }
+  
 
   // --- Helper Methods ---
 

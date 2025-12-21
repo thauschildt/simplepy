@@ -100,11 +100,11 @@ void main() {
     });
 
     test('should handle mixed numbers and prefixes', () {
-       final source = '123 0x40 0.5 0b10 99 0o7';
+       final source = '123 0x40 0.5 .5 5. 0b10 99 0o7';
        final lexer = Lexer(source);
        final tokens = lexer.scanTokens();
        final literals = tokens.where((t) => t.type == TokenType.NUMBER).map((t) => t.literal).toList();
-       expect(literals, equals([123, 64, 0.5, 2, 99, 7]));
+       expect(literals, equals([123, 64, 0.5, 0.5, 5.0, 2, 99, 7]));
     });
 
     test('should throw LexerError for invalid prefixed numbers', () {
@@ -114,6 +114,12 @@ void main() {
       expect(() => Lexer('0xG').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid hexadecimal literal'))));
       expect(() => Lexer('0b2').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid binary literal'))));
       expect(() => Lexer('0o8').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid octal literal'))));
+    });
+
+    test('should throw LexerError for invalid numbers', () {
+      expect(() => Lexer('12..3').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid decimal literal.'))));
+      expect(() => Lexer('1.2.3').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid decimal literal.'))));
+      expect(() => Lexer('123.join()').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid decimal literal.'))));
     });
 
     test('should tokenize keywords and identifiers', () {

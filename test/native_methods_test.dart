@@ -36,9 +36,9 @@ void runSimplePyTest(
     final statements = Parser(tokens).parse();
     interpreter.interpret(statements, printCallback, errorCallback);
   } on LexerError catch (e) {
-    fail('Test failed due to LexerError: $e\nCode:\n$code');
+      fail('Test failed due to LexerError: $e\nCode:\n$code');
   } on ParseError catch (e) {
-    fail('Test failed due to ParseError: $e\nCode:\n$code');
+      fail('Test failed due to ParseError: $e\nCode:\n$code');
   } on RuntimeError catch (e) {
     runtimeErrorOccurred = true;
     runtimeErrorMessage = e.toString();
@@ -600,7 +600,6 @@ r8 = "aaa".replace("a", "b", -5) # Count < 0 (replace all)
        // Errors
       runSimplePyTest("','.join([1, 2])", expectError: true, errorContains: 'TypeError: sequence item 0: expected str instance');
       runSimplePyTest("','.join({})", expectError: true, errorContains: 'TypeError: can only join an iterable of strings'); // Non-iterable or wrong type
-      runSimplePyTest("123.join(['a'])", expectError: true, errorContains: "Undefined variable 'join'");
     });
 
     test('str.upper() / str.lower()', () {

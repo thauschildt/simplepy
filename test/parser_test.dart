@@ -147,4 +147,89 @@ def add(a, b=1):
         expect(result2.errors.first, contains("Expect expression"));
      });
   });
+
+  group('Detect unexpected token errors', () {
+
+    test('unexpected token after expression', () {
+        final result1 = parseAndCollectErrors('x = 1 2');
+        expect(result1.hasErrors, isTrue);
+        expect(result1.errors.first, contains("Unexpected token"));
+
+        final result2 = parseAndCollectErrors('2 ""');
+        expect(result2.hasErrors, isTrue);
+        expect(result2.errors.first, contains("Unexpected token"));
+     });
+
+    test('unexpected token in if statements', () {
+        final result1 = parseAndCollectErrors('if 1==1:\n  print(2) else: print(3)');
+        expect(result1.hasErrors, isTrue);
+        expect(result1.errors.first, contains("Unexpected token"));
+
+        final result2 = parseAndCollectErrors('if 1==1: print(2) 3');
+        expect(result2.hasErrors, isTrue);
+        expect(result2.errors.first, contains("Unexpected token"));
+
+        final result3 = parseAndCollectErrors('if 1==1: print(2)\nelse: print(3) 4');
+        expect(result3.hasErrors, isTrue);
+        expect(result3.errors.first, contains("Unexpected token"));
+
+        final result4 = parseAndCollectErrors('if 1==1: print(2)\nelif 2==3: print(3) else'); // Missing expression
+        expect(result4.hasErrors, isTrue);
+        expect(result4.errors.first, contains("Unexpected token"));
+     });
+
+     test('unexpected token in single-line while, for', () {
+        final result1 = parseAndCollectErrors('while 1<0: x=2 3');
+        expect(result1.hasErrors, isTrue);
+        expect(result1.errors.first, contains("Unexpected token"));
+
+        final result2 = parseAndCollectErrors('for x in range(1): print(x):');
+        expect(result2.hasErrors, isTrue);
+        expect(result2.errors.first, contains("Unexpected token"));
+     });
+
+     test('unexpected token after return', () {
+      final result1 = parseAndCollectErrors('return 1 2');
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
+
+      final result2 = parseAndCollectErrors('return "hello" 123');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
+    });
+
+    test('unexpected token after pass/break/continue', () {
+      final result1 = parseAndCollectErrors('pass 123');
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
+
+      final result2 = parseAndCollectErrors('break 123');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
+
+      final result3 = parseAndCollectErrors('continue 123');
+      expect(result3.hasErrors, isTrue);
+      expect(result3.errors.first, contains("Unexpected token"));
+    });
+
+    test('unexpected token after global/nonlocal', () {
+      final result1 = parseAndCollectErrors('global x 123');
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
+
+      final result2 = parseAndCollectErrors('nonlocal x 123');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
+    });
+
+    test('unexpected token after function definition', () {
+      final result1 = parseAndCollectErrors('def foo(): pass 123');
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
+
+      final result2 = parseAndCollectErrors('def foo(): return 1 2');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
+    });
+  });
 }
