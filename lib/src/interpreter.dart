@@ -658,14 +658,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Default print implementation writing to stdout, handling partial lines.
   void _printWithBuffer(String s) {
     int n=s.lastIndexOf("\n");
-    String first = "";
+    String first = _outbuf.toString(); // any characters remaining from previous print
+    _outbuf.clear();
     if (n>=0) {
-      first = s.substring(0, n);
+      first += s.substring(0, n); // new output up to last newline
       String last = s.substring(n+1);
+      _outbuf.write(last); // keep characters after newline for next print
+    } else {
       _outbuf.clear();
-      _outbuf.write(last);
+      _outbuf.write(s);
     }
-    print(_outbuf.toString() + first);
+    if (first.isNotEmpty) {
+      print(first);
+    }
   }
 
   /// Helper to get a predictable type name string used by type() and error messages.
@@ -723,6 +728,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (interpreter._print != null) {
       interpreter._print!(output + end);
     } else {
+      print("B");
       interpreter._printWithBuffer(output + end);
     }
     return null; // print returns None
@@ -1460,6 +1466,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       ); // Python gives SyntaxError
       hadRuntimeError = true;
       _lastExpressionValue = null;
+    }
+    if (printCallback==null) {
+      // flush buffer
+      _printWithBuffer("\n");
     }
     return _lastExpressionValue;
   }
