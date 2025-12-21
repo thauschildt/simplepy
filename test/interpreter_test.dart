@@ -1267,5 +1267,50 @@ print(l,d)
       expect(result.output, equals("[1, 2, 3] {'x': [1, 2]}\n"));
     });
   });
+
+  group('multiline strings', () {
+    test('2-line string with """', () {
+      final result = runCode(r'''
+x="""1
+2"""
+print(x)
+''');
+      expect(result.output, equals("1\n2\n"));
+    });
+    test("2-line string with '''", () {
+      final result = runCode(r"""
+x='''3
+4'''
+print(x)
+""");
+      expect(result.output, equals("3\n4\n"));
+    });
+    test('2-line f-string with """', () {
+      final result = runCode(r'''
+a=42
+x=f"""1
+{a}"""
+print(x)
+''');
+      expect(result.output, equals("1\n42\n"));
+    });
+    test("2-line f-string with '''", () {
+      final result = runCode(r"""
+a=99
+x=f'''{a**2}
+x'''
+print(x)
+""");
+      expect(result.output, equals("9801\nx\n"));
+    });
+
+    test('non-matching quotes', () {
+      final result = runCode(r'''
+x="""a
+b\'\'\'
+''');
+      expect(result.error, isA<LexerError>().having((e) => e.message, 'message', contains('Unterminated multiline')));
+    });
+  });
   // end of global/nonlocal tests
 }

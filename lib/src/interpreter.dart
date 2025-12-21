@@ -658,18 +658,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Default print implementation writing to stdout, handling partial lines.
   void _printWithBuffer(String s) {
     int n=s.lastIndexOf("\n");
-    String first = _outbuf.toString(); // any characters remaining from previous print
+    String beforeNewline = _outbuf.toString(); // any characters remaining from previous print
     _outbuf.clear();
     if (n>=0) {
-      first += s.substring(0, n); // new output up to last newline
+      beforeNewline += s.substring(0, n); // new output up to last newline
       String last = s.substring(n+1);
       _outbuf.write(last); // keep characters after newline for next print
     } else {
       _outbuf.clear();
       _outbuf.write(s);
     }
-    if (first.isNotEmpty) {
-      print(first);
+    if (beforeNewline.isNotEmpty) {
+      print(beforeNewline);
     }
   }
 

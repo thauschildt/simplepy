@@ -313,16 +313,21 @@ class Lexer {
         break;
       case '"':
       case "'":
-        string(c);
+        if (peek() == c && peekNext()==c) {
+          string(c, true);
+        } else {
+          string(c, false);
+        }
         break;
       // --- Potential F-string ---
       case 'f':
       case 'F':
-        // Lookahead: is the next character a quotation mark?
-        if (peek() == '"' || peek() == "'") {
-          String quoteType = peek();
+        String q=peek();
+        if (q == '"' || q == "'") {
+          String quoteType = q;
+          bool multiline = peekNext(1)==q && peekNext(2)==q;
           advance();
-          fstring(quoteType);
+          fstring(quoteType, multiline);
         } else {
           // Just an identifier. Go back to include the 'f' in the identifier name
           current--;
@@ -652,63 +657,112 @@ class Lexer {
     }
   }
 
-  /// Scans a string literal enclosed in single (') or double (") quotes.
+  /// Scans a string literal enclosed in single (') or double (") quotes
+  /// or multiline strings enclosed in ''' or """.
   /// Handles unterminated strings by throwing a [LexerError].
   /// [quoteType] is the opening quote character (' or ").
   /// TODO: Implement handling of escape sequences (e.g., \n, \", \\).
-  void string(String quoteType) {
+  void string(String quoteType, [bool multiline=false]) {
     int startLine = line;
     int startCol = currentColumn();
-    while (peek() != quoteType && !isAtEnd()) {
+    int start = current; // position after 1st quotation mark
+    if (multiline) {
+      // skip to character after quotation marks
+      advance(); advance();
+      start+=2;
+    }
+
+    while (true) {
+      if (isAtEnd()) {
+        throw LexerError(startLine, startCol, multiline ? "Unterminated multiline string." : "Unterminated string.");
+      }
+      // check for closing quotation marks
+      if (!multiline && peek() == quoteType) {
+        break; 
+      } else if (multiline && peek() == quoteType && peekNext(1) == quoteType && peekNext(2) == quoteType) {
+        break;
+      }
+      // handle line breaks
       if (peek() == '\n') {
+        if (!multiline) {
+          throw LexerError(line, currentColumn(), "Unterminated string (newline not allowed in single-line strings).");
+        }
         line++;
-        lineStart = current + 1; // Next char starts new line
+        lineStart = current + 1;
       }
       advance();
     }
 
-    if (isAtEnd()) {
-      throw LexerError(startLine, startCol, "Unterminated string.");
+    // skip closing quotation mark(s)
+    if (multiline) {
+      advance(); advance(); advance();
+    } else {
+      advance();
     }
 
-    // The closing quote.
-    advance();
-
-    // Trim the surrounding quotes.
-    String value = source.substring(start + 1, current - 1);
+    // extract string value
+    String value = source.substring(start, current - (multiline ? 3 : 1));
     String processedValue = _processEscapes(value);
     addToken(TokenType.STRING, processedValue);
   }
 
   /// Scans an f-string literal. Finds closing quote, handles basic escapes, but preserves content.
-  void fstring(String quoteType) {  
+  void fstring(String quoteType, [bool multiline = false]) {
     int startLine = line;
-    // Start column should be the 'f', which is source[start-2]
-    int startCol = (start -0) - lineStart + 1;
-    // current position is already AFTER the opening quote here
-    while (peek() != quoteType && !isAtEnd()) {
-      // Handle escapes within f-string, they affect finding the end quote
-      if (peek() == '\\' && current + 1 < source.length) {
-        advance(); // Consume backslash
+    // Start column is the 'f', which is at source[start-2] (assuming 'f' is at start-2)
+    int startCol = (start - lineStart) - 1; // 'f' is 2 chars before the opening quote
+    int contentStart = current; // Position after the opening quote(s)
+
+    if (multiline) {
+      // Skip the opening triple quotes (e.g., f""")
+      advance(); advance();
+      contentStart += 2; // Update start after the triple quotes
+    }
+
+    while (true) {
+      if (isAtEnd()) {
+        throw LexerError(startLine, startCol, multiline ? "Unterminated multiline f-string." : "Unterminated f-string.");
       }
-      if (peek() == '\n') {
+
+      // Check for closing quotes
+      if (!multiline && peek() == quoteType) {
+        break; // Single-line f-string: closing quote found
+      } else if (multiline && peek() == quoteType && peekNext(1) == quoteType && peekNext(2) == quoteType) {
+        break; // Multiline f-string: closing triple quotes found
+      }
+
+      // Handle escape sequences (e.g., \", \n)
+      if (peek() == '\\' && current + 1 < source.length) {
+        advance(); // Consume backslash, next character is part of the escape sequence
+      }
+
+      // Handle newline in multiline f-string
+      if (multiline && peek() == '\n') {
         line++;
         lineStart = current + 1;
       }
-      advance(); // Consume character
+      // Newline in single-line f-string? → Error!
+      else if (!multiline && peek() == '\n') {
+        throw LexerError(line, current - lineStart + 1, "Unterminated f-string (newline not allowed in single-line f-strings).");
+      }
+      advance(); // Consume the current character
     }
-    if (isAtEnd()) {
-      throw LexerError(startLine, startCol, "Unterminated f-string.");
+
+    int contentEnd = current; // Position before the closing quote(s)
+
+    // Skip the closing quote(s)
+    if (multiline) {
+      advance(); advance(); advance();
+    } else {
+      advance();
     }
-    // The closing quote.
-    advance();
-    // Get the raw content between the quotes (Parser will handle {{, }}, and {})
-    // start was already adjusted to the 'f' prefix
-    String rawContent = source.substring(start + 2, current - 1);
-    // NO escape processing here (parser needs raw content)
-    // Lexeme includes f prefix and quotes for context
-    String lexeme = source.substring(start, current); // Include 'f' prefix
-    // Literal value is the raw content for the parser
+
+    // Extract the content between the quotes
+    String rawContent = source.substring(contentStart, contentEnd);
+    // Lexeme includes 'f' prefix and quotes for context
+    String lexeme = source.substring(start, current);
+
+    // Add token for the parser to handle
     tokens.add(Token(TokenType.F_STRING, lexeme, rawContent, startLine, startCol));
   }
 
@@ -741,9 +795,9 @@ class Lexer {
 
   /// Returns the character after the current position without consuming it.
   /// Returns a null character ('\x00') if near the end of the source.
-  String peekNext() {
-    if (current + 1 >= source.length) return '\x00';
-    return source[current + 1];
+  String peekNext([int n=1]) {
+    if (current + n >= source.length) return '\x00';
+    return source[current + n];
   }
 
   /// Checks if character [c] is a letter (a-z, A-Z) or underscore (_).

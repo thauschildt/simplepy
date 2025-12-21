@@ -2,6 +2,7 @@
 - added `global`and `nonlocal`statements
 - added single-line if/elif/else, for, while and def (e.g. `def f(x): return 42` without newline)
 - enabled line continuation: Function calls, expressions or other code can now span multiple lines as long as there is an unclosed parenthesis `()` or `[]` or `{}`
+- added multiline strings and multiline f-strings, e.g. `x="""2\n{3+4}"""`
 
 ## 1.2.1
 - improve package description and fix linter warnings
