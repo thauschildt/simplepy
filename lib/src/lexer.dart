@@ -566,6 +566,11 @@ class Lexer {
       }
     }
     
+    // 5. Check for invalid characters after number
+    if (!isAtEnd() && !" \n\t\r+-*/%<>=&|~^!:()[]{},".contains(peek())) {
+      throw LexerError(line, currentColumn(), "Invalid decimal literal.");
+    }
+
     // --- Parse and validate the Literal Value ---
     String numberString = source.substring(start, current);
 
