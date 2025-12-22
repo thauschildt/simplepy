@@ -646,6 +646,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("repr", NativeFunction(_reprBuiltin));
   }
 
+  T withEnvironment<T>(Environment env, T Function() callback) {
+    Environment previousEnv = _environment;
+    _environment = env;
+    try {
+      return callback();
+    } finally {
+      _environment = previousEnv;
+    }
+  }
+
   /// Helper to define built-ins in the global environment.
   void _registerBuiltin(String name, PyCallable callable) {
     globals.define(name, callable);
@@ -2773,4 +2783,130 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   String stringify(Object? object) {
     return object is String? object : repr(object);
   }
+  
+  @override
+  Object? visitDictComprehensionExpr(DictComprehensionExpr expr) {
+    Map<dynamic, dynamic> result = {};
+    _evaluateComprehension(expr.clauses, (env) {
+      dynamic key = expr.key.accept(this);
+      dynamic value = expr.value.accept(this);
+      result[key] = value;
+    });
+    return result;
+  }
+  
+  @override
+  Object? visitListComprehensionExpr(ListComprehensionExpr expr) {
+    List<dynamic> result = [];
+    _evaluateComprehension(expr.clauses, (env) {
+      result.add(withEnvironment(env, () => expr.output.accept(this)));
+    });
+    return PyList(result);
+  }
+
+  /// Builds the list from a list comprehension expression.
+  /// Each ForClause has its own environment.
+  void _evaluateComprehension(List<ComprehensionClause> clauses, Function(Environment) callback) {
+    List<Environment?> environments = [];
+    List<Iterator<dynamic>?> iterators = [];
+    List<dynamic> iterables = [];
+    List<dynamic> currentValues = [];
+
+    // initialize iterators and environments for ForClauses
+    int lastForIndex=-1;
+    for (int i = 0; i < clauses.length; i++) {
+      environments.add(null);
+      if (clauses[i] is ForClause) {
+        lastForIndex = i;
+        ForClause forClause = clauses[i] as ForClause;
+        dynamic iterable = forClause.iterable.accept(this);
+        if (iterable is! PyList) {
+          throw RuntimeError(
+              Token(TokenType.STRING, forClause.iterable.toString(), null, 0, 0),
+              "Object is not iterable.");
+        }
+        iterables.add(iterable);
+        iterators.add(iterable.list.iterator);
+        currentValues.add(null);
+      } else {
+        iterators.add(null);
+        iterables.add(null);
+        currentValues.add(null);
+      }
+    }
+
+    assert(lastForIndex>=0, "missing 'for' clause in comprehension");
+
+    // Main loop:
+    // Evaluate ForClauses and IfClauses from left to right,
+    // each time the end is reached, the expression is evaluated in the callback and added to the result.
+    int index = 0;
+    while (index >= 0) {
+      if (index == clauses.length) {
+        callback(environments[lastForIndex]!);
+        index = lastForIndex;
+      } else if (clauses[index] is ForClause) {
+        ForClause forClause = clauses[index] as ForClause;
+        Iterator<dynamic>? iterator = iterators[index];
+
+        if (iterator == null) {
+          throw RuntimeError(Token(TokenType.STRING, "", null, 0, 0), "Iterator not initialized.");
+        }
+
+        if (iterator.moveNext()) {
+          dynamic value = iterator.current;
+          currentValues[index] = value;
+
+          if (environments[index]==null) {
+            int prevIndex=index-1;
+            while (prevIndex>=0 && environments[prevIndex]==null) { --prevIndex; }
+            environments[index] = Environment(enclosing: index==0? _environment: environments[prevIndex]);
+          }
+          environments[index]!.define(forClause.name.lexeme, value);
+          index++;
+        } else {
+          environments[index] = null;
+          iterators[index] = iterables[index].list.iterator;
+          index--;
+          while (index>=0 && clauses[index] is! ForClause) {
+            --index;
+          }
+        }
+      } else if (clauses[index] is IfClause) {
+        IfClause ifClause = clauses[index] as IfClause;
+        int envIndex = index;
+        while (environments[envIndex]==null) { --envIndex; }
+        bool condition = withEnvironment(environments[envIndex]!, () {
+          dynamic result = ifClause.condition.accept(this);
+          if (result is! bool) {
+            throw RuntimeError(
+                Token(TokenType.IF, ifClause.condition.toString(), null, 0, 0),
+                "Condition must be a boolean.");
+          }
+          return result;
+        });
+
+        if (condition) {
+          index++;
+        } else {
+          int prevForIndex = index;
+          while (prevForIndex>=0 && clauses[prevForIndex] is! ForClause) {
+            --prevForIndex;
+          }
+          assert(prevForIndex>=0, "couldnt find previous for clause");
+          if (index > 0 && clauses[index - 1] is ForClause) { 
+            ForClause previousForClause = clauses[prevForIndex] as ForClause;
+            dynamic iterable = previousForClause.iterable.accept(this);
+            if (iterable is! PyList) {
+              throw RuntimeError(
+                  Token(TokenType.STRING, previousForClause.iterable.toString(), null, 0, 0),
+                  "Object is not iterable.");
+            }
+          }
+          index = prevForIndex;
+        }
+      }
+    }
+  }
+
 }

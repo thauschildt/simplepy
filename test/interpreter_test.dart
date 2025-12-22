@@ -1341,5 +1341,26 @@ print(x)
     });
   });
 
-  // end of global/nonlocal tests
+  group('list comprehensions', () {
+
+    var tests = [
+      ["[x for x in range(5)]", "[0, 1, 2, 3, 4]"],
+      ["[2*x for x in [1,2,3]]", "[2, 4, 6]"],
+      ["[x for x in range(10) if x % 2 == 0]", "[0, 2, 4, 6, 8]"],
+      ["[(x, y) for x in range(3) for y in range(2)]", "[(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]"],
+      ["[x + 10 * y for x in range(3) for y in range(2) if x % 2 == 0]", "[0, 10, 2, 12]"],
+      ["[x + 10 * y for x in range(3) if x % 2 == 0 for y in range(2)]", "[0, 10, 2, 12]"],
+      ["[x + y for x in range(5) for y in range(5) if x % 2 == 0 if y % 2 == 0]", "[0, 2, 4, 2, 4, 6, 4, 6, 8]"],
+      ["[f\"x={x} y={y} z={z}\" for x in range(2) for y in range(2) if x != y for z in range(2) if y != z]", "['x=0 y=1 z=0', 'x=1 y=0 z=1']"],
+      ["[x for x in range(5) if x > 10]", "[]"],
+      ["[[x, y] for x in range(2) for y in range(2)]", "[[0, 0], [0, 1], [1, 0], [1, 1]]"],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode("print(${t[0]})");
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+  });
 }

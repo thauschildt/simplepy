@@ -1008,17 +1008,31 @@ class Parser {
         return SuperExpr(keyword, method);
     }
     if (match([TokenType.LEFT_BRACKET])) {
-      // List literal [ ... ]
-      Token bracket = previous();
-      List<Expr> elements = [];
-      if (!check(TokenType.RIGHT_BRACKET)) {
-        do {
-          if (check(TokenType.RIGHT_BRACKET)) break; // Allow trailing comma: [1, 2, ]
-          elements.add(expression());
-        } while (match([TokenType.COMMA]));
+      // Check if it's a list comprehension
+      int start = current - 1; // saveState();
+      Token bracket = peek();
+      if (peek().type == TokenType.RIGHT_BRACKET) {
+        consume(TokenType.RIGHT_BRACKET,'');
+        return ListLiteralExpr(bracket, []);
       }
-      consume(TokenType.RIGHT_BRACKET, "Expect ']' after list elements.");
-      return ListLiteralExpr(bracket, elements);
+      Expr expr = expression();
+      if (peek().type == TokenType.FOR) {
+        // It's a list comprehension
+        current = start; //restoreState();  
+        return listComprehension();
+      } else {
+        // List literal [ ... ]
+        List<Expr> elements = [expr];
+        if (check(TokenType.COMMA)) { // no comma after first element? -> done
+          consume(TokenType.COMMA, "Expect ',' after list element.");
+          do {
+            if (check(TokenType.RIGHT_BRACKET)) break; // Allow trailing comma: [1, 2, ]
+            elements.add(expression());
+          } while (match([TokenType.COMMA]));
+        }
+        consume(TokenType.RIGHT_BRACKET, "Expect ']' after list elements.");
+        return ListLiteralExpr(bracket, elements);
+      }
     }
 
     if (match([TokenType.LEFT_BRACE])) {
@@ -1114,7 +1128,59 @@ class Parser {
     print("throw Error");
     throw error(peek(), "Expect expression.");
   }
+
+  /// Parses a list/dict/set comprehension (without the brackets)
+  /// comprehension ::= expression 'for' IDENTIFIER 'in' iterable 'if' condition ( 'if' condition )*
+  List<ComprehensionClause> comprehension() {
+    List<ComprehensionClause> clauses = [];
+    // Parse 'for' clause
+    if (match([TokenType.FOR])) {
+      Token name = consume(TokenType.IDENTIFIER, "Expect identifier after 'for'.");
+      consume(TokenType.IN, "Expect 'in' after for target.");
+      Expr iterable = call();
+      clauses.add(ForClause(name, iterable));
+      // Parse optional 'if' clauses
+      while (match([TokenType.IF])) {
+        Expr condition = expression();
+        clauses.add(IfClause(condition));
+      }
+    }
+    return clauses;
+  }
+
+  /// Parses a list comprehension (including the brackets)
+  Expr listComprehension() {
+    consume(TokenType.LEFT_BRACKET, "Expect '[' at start of list comprehension.");
+    // Parse the output expression
+    Expr output = expression();
+    // Parse the comprehensions
+    List<ComprehensionClause> clauses = [];
+    while (true) {
+      List<ComprehensionClause> newClauses = comprehension();
+      if (newClauses.isEmpty) break;
+      clauses.addAll(newClauses);
+    }
+    consume(TokenType.RIGHT_BRACKET, "Expect ']' at end of list comprehension.");
+    return ListComprehensionExpr(output, clauses);
+  }
   
+  /// Parses a dict comprehension (including the braces)
+  Expr dictComprehension() {
+    consume(TokenType.LEFT_BRACE, "Expect '{' at start of dict comprehension.");
+    // Parse the key-value pair
+    Expr key = expression();
+    consume(TokenType.COLON, "Expect ':' in dict comprehension.");
+    Expr value = expression();
+    // Parse the comprehensions
+    List<ComprehensionClause> clauses = [];
+    while (true) {
+      List<ComprehensionClause> newClauses = comprehension();
+      if (newClauses.isEmpty) break;
+      clauses.addAll(newClauses);
+    }
+    consume(TokenType.RIGHT_BRACE, "Expect '}' at end of dict comprehension.");
+    return DictComprehensionExpr(key, value, clauses);
+  }
 
   // --- Helper Methods ---
 

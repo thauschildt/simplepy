@@ -58,6 +58,8 @@ abstract class ExprVisitor<R> {
   R visitSetLiteralExpr(SetLiteralExpr expr);
   /// Visits an f-string (e.g. f"{x}")
   R visitFStringExpr(FStringExpr expr);
+  R visitListComprehensionExpr(ListComprehensionExpr expr);
+  R visitDictComprehensionExpr(DictComprehensionExpr expr);
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -300,6 +302,61 @@ class DictLiteralExpr extends Expr {
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitDictLiteralExpr(this);
 }
+
+/// Base class for ForClause and IfClause to be used in comprehensions
+abstract class ComprehensionClause {
+  R accept<R>(ComprehensionVisitor<R> visitor);
+}
+
+abstract class ComprehensionVisitor<R> {
+  R visitForClause(ForClause clause);
+  R visitIfClause(IfClause clause);
+}
+
+class ForClause implements ComprehensionClause {
+  final Token name;
+  final Expr iterable;
+  ForClause(this.name, this.iterable);
+  @override
+  R accept<R>(ComprehensionVisitor<R> visitor) {
+    return visitor.visitForClause(this);
+  }
+}
+
+class IfClause implements ComprehensionClause {
+  final Expr condition;
+  IfClause(this.condition);
+  @override
+  R accept<R>(ComprehensionVisitor<R> visitor) {
+    return visitor.visitIfClause(this);
+  }
+}
+
+class ListComprehensionExpr implements Expr {
+  final Expr output;
+  final List<ComprehensionClause> clauses;
+
+  ListComprehensionExpr(this.output, this.clauses);
+
+  @override
+  R accept<R>(ExprVisitor<R> visitor) {
+    return visitor.visitListComprehensionExpr(this);
+  }
+}
+
+class DictComprehensionExpr implements Expr {
+  final Expr key;
+  final Expr value;
+  final List<ComprehensionClause> clauses;
+
+  DictComprehensionExpr(this.key, this.value, this.clauses);
+
+  @override
+  R accept<R>(ExprVisitor<R> visitor) {
+    return visitor.visitDictComprehensionExpr(this);
+  }
+}
+
 
 /// Represents a logical AND or OR expression, supporting short-circuit evaluation.
 class LogicalExpr extends Expr {
@@ -802,5 +859,17 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     if (value is bool) return value ? "True" : "False";
     // Add other types if needed
     return value.toString();
+  }
+  
+  @override
+  String visitDictComprehensionExpr(DictComprehensionExpr expr) {
+    // TODO: implement visitDictComprehensionExpr
+    throw UnimplementedError();
+  }
+  
+  @override
+  String visitListComprehensionExpr(ListComprehensionExpr expr) {
+    // TODO: implement visitListComprehensionExpr
+    throw UnimplementedError();
   }
 }
