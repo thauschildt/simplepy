@@ -1,4 +1,4 @@
-## 1.3.0 - Unreleased 
+## 1.3.0 
 - added `global`and `nonlocal`statements
 - added single-line if/elif/else, for, while and def (e.g. `def f(x): return 42` without newline)
 - enabled line continuation: Function calls, expressions or other code can now span multiple lines as long as there is an unclosed parenthesis `()` or `[]` or `{}`
