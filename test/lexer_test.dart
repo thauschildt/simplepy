@@ -9,23 +9,26 @@ void main() {
       final tokens = lexer.scanTokens();
       final types = tokens.map((t) => t.type).toList();
 
-      expect(types, equals([
-        TokenType.PLUS,
-        TokenType.MINUS,
-        TokenType.STAR,
-        TokenType.SLASH,
-        TokenType.EQUAL,
-        TokenType.EQUAL_EQUAL,
-        TokenType.BANG_EQUAL,
-        TokenType.LESS,
-        TokenType.LESS_EQUAL,
-        TokenType.GREATER,
-        TokenType.GREATER_EQUAL,
-        TokenType.PERCENT,
-        TokenType.STAR_STAR,
-        TokenType.SLASH_SLASH,
-        TokenType.EOF,
-      ]));
+      expect(
+        types,
+        equals([
+          TokenType.PLUS,
+          TokenType.MINUS,
+          TokenType.STAR,
+          TokenType.SLASH,
+          TokenType.EQUAL,
+          TokenType.EQUAL_EQUAL,
+          TokenType.BANG_EQUAL,
+          TokenType.LESS,
+          TokenType.LESS_EQUAL,
+          TokenType.GREATER,
+          TokenType.GREATER_EQUAL,
+          TokenType.PERCENT,
+          TokenType.STAR_STAR,
+          TokenType.SLASH_SLASH,
+          TokenType.EOF,
+        ]),
+      );
     });
 
     test('should tokenize literals', () {
@@ -48,7 +51,7 @@ void main() {
       expect(tokens[7].type, TokenType.EOF);
     });
 
-     test('should tokenize hexadecimal integers', () {
+    test('should tokenize hexadecimal integers', () {
       final source = '0xFF 0x1a 0X0 0x123ABC';
       final lexer = Lexer(source);
       final tokens = lexer.scanTokens();
@@ -63,7 +66,7 @@ void main() {
       expect(tokens[2].type, TokenType.NUMBER);
       expect(tokens[2].literal, 0);
       expect(tokens[2].lexeme, '0X0');
-       expect(tokens[3].type, TokenType.NUMBER);
+      expect(tokens[3].type, TokenType.NUMBER);
       expect(tokens[3].literal, 1194684); // 0x123ABC
       expect(tokens[3].lexeme, '0x123ABC');
       expect(tokens[4].type, TokenType.EOF);
@@ -100,26 +103,111 @@ void main() {
     });
 
     test('should handle mixed numbers and prefixes', () {
-       final source = '123 0x40 0.5 .5 5. 0b10 99 0o7';
-       final lexer = Lexer(source);
-       final tokens = lexer.scanTokens();
-       final literals = tokens.where((t) => t.type == TokenType.NUMBER).map((t) => t.literal).toList();
-       expect(literals, equals([123, 64, 0.5, 0.5, 5.0, 2, 99, 7]));
+      final source = '123 0x40 0.5 .5 5. 0b10 99 0o7';
+      final lexer = Lexer(source);
+      final tokens = lexer.scanTokens();
+      final literals =
+          tokens
+              .where((t) => t.type == TokenType.NUMBER)
+              .map((t) => t.literal)
+              .toList();
+      expect(literals, equals([123, 64, 0.5, 0.5, 5.0, 2, 99, 7]));
     });
 
     test('should throw LexerError for invalid prefixed numbers', () {
-      expect(() => Lexer('0x').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Missing digits after'))));
-      expect(() => Lexer('0b').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Missing digits after'))));
-      expect(() => Lexer('0o').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Missing digits after'))));
-      expect(() => Lexer('0xG').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid hexadecimal literal'))));
-      expect(() => Lexer('0b2').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid binary literal'))));
-      expect(() => Lexer('0o8').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid octal literal'))));
+      expect(
+        () => Lexer('0x').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Missing digits after'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('0b').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Missing digits after'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('0o').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Missing digits after'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('0xG').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid hexadecimal literal'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('0b2').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid binary literal'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('0o8').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid octal literal'),
+          ),
+        ),
+      );
     });
 
     test('should throw LexerError for invalid numbers', () {
-      expect(() => Lexer('12..3').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid decimal literal.'))));
-      expect(() => Lexer('1.2.3').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid decimal literal.'))));
-      expect(() => Lexer('123.join()').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('Invalid decimal literal.'))));
+      expect(
+        () => Lexer('12..3').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid decimal literal.'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('1.2.3').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid decimal literal.'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('123.join()').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid decimal literal.'),
+          ),
+        ),
+      );
     });
 
     test('should tokenize keywords and identifiers', () {
@@ -128,13 +216,16 @@ void main() {
       final tokens = lexer.scanTokens();
       final types = tokens.map((t) => t.type).toList();
 
-      expect(types, equals([
-        TokenType.IF,
-        TokenType.IDENTIFIER,
-        TokenType.ELSE,
-        TokenType.DEF,
-        TokenType.EOF,
-      ]));
+      expect(
+        types,
+        equals([
+          TokenType.IF,
+          TokenType.IDENTIFIER,
+          TokenType.ELSE,
+          TokenType.DEF,
+          TokenType.EOF,
+        ]),
+      );
       expect(tokens[1].lexeme, 'my_var');
     });
 
@@ -154,28 +245,53 @@ print("done")
 
       // Expect specific INDENT/DEDENT/NEWLINE sequence
       // Note: NEWLINEs are implicitly added *before* INDENT/DEDENT sometimes
-      expect(types, containsAllInOrder([
-        // var = 1
-        TokenType.IDENTIFIER, TokenType.EQUAL, TokenType.NUMBER, TokenType.NEWLINE,
-        // if var > 0:
-        TokenType.IF, TokenType.IDENTIFIER, TokenType.GREATER, TokenType.NUMBER, TokenType.COLON, TokenType.NEWLINE,
-        // Indent Block 1
-        TokenType.INDENT,
-        TokenType.IDENTIFIER, TokenType.LEFT_PAREN, TokenType.IDENTIFIER, TokenType.RIGHT_PAREN, TokenType.NEWLINE, // print(var)
-        TokenType.IDENTIFIER, TokenType.EQUAL, TokenType.NUMBER, TokenType.NEWLINE, // other = 2
-        // Dedent Block 1, Start Else
-        TokenType.DEDENT, TokenType.ELSE, TokenType.COLON, TokenType.NEWLINE,
-        // Indent Block 2
-        TokenType.INDENT,
-        TokenType.IDENTIFIER, TokenType.LEFT_PAREN, TokenType.STRING, TokenType.RIGHT_PAREN, TokenType.NEWLINE, // print(...)
-        // Dedent Block 2, Start Final Print
-        TokenType.DEDENT,
-        TokenType.IDENTIFIER, TokenType.LEFT_PAREN, TokenType.STRING, TokenType.RIGHT_PAREN, // print("done")
-        TokenType.EOF,
-      ]));
+      expect(
+        types,
+        containsAllInOrder([
+          // var = 1
+          TokenType.IDENTIFIER,
+          TokenType.EQUAL,
+          TokenType.NUMBER,
+          TokenType.NEWLINE,
+          // if var > 0:
+          TokenType.IF,
+          TokenType.IDENTIFIER,
+          TokenType.GREATER,
+          TokenType.NUMBER,
+          TokenType.COLON,
+          TokenType.NEWLINE,
+          // Indent Block 1
+          TokenType.INDENT,
+          TokenType.IDENTIFIER,
+          TokenType.LEFT_PAREN,
+          TokenType.IDENTIFIER,
+          TokenType.RIGHT_PAREN,
+          TokenType.NEWLINE, // print(var)
+          TokenType.IDENTIFIER,
+          TokenType.EQUAL,
+          TokenType.NUMBER,
+          TokenType.NEWLINE, // other = 2
+          // Dedent Block 1, Start Else
+          TokenType.DEDENT, TokenType.ELSE, TokenType.COLON, TokenType.NEWLINE,
+          // Indent Block 2
+          TokenType.INDENT,
+          TokenType.IDENTIFIER,
+          TokenType.LEFT_PAREN,
+          TokenType.STRING,
+          TokenType.RIGHT_PAREN,
+          TokenType.NEWLINE, // print(...)
+          // Dedent Block 2, Start Final Print
+          TokenType.DEDENT,
+          TokenType.IDENTIFIER,
+          TokenType.LEFT_PAREN,
+          TokenType.STRING,
+          TokenType.RIGHT_PAREN, // print("done")
+          TokenType.EOF,
+        ]),
+      );
     });
 
-     test('should ignore comments', () {
+    test('should ignore comments', () {
       final source = '''
 # This is a full line comment
 x = 1 # This is an end-of-line comment
@@ -187,11 +303,20 @@ print(x) # Another comment
       final types = tokens.map((t) => t.type).toList();
 
       // Verify that comments are skipped and structure is preserved
-       expect(types, containsAllInOrder([
-        TokenType.IDENTIFIER, TokenType.EQUAL, TokenType.NUMBER, TokenType.NEWLINE,
-        TokenType.IDENTIFIER, TokenType.LEFT_PAREN, TokenType.IDENTIFIER, TokenType.RIGHT_PAREN,
-        TokenType.EOF,
-      ]));
+      expect(
+        types,
+        containsAllInOrder([
+          TokenType.IDENTIFIER,
+          TokenType.EQUAL,
+          TokenType.NUMBER,
+          TokenType.NEWLINE,
+          TokenType.IDENTIFIER,
+          TokenType.LEFT_PAREN,
+          TokenType.IDENTIFIER,
+          TokenType.RIGHT_PAREN,
+          TokenType.EOF,
+        ]),
+      );
     });
 
     test('should throw LexerError for unterminated string', () {
@@ -221,7 +346,11 @@ print(x) # Another comment
         expect(tokens[0].type, TokenType.NUMBER, reason: "Source: $source");
         expect(tokens[0].lexeme, source, reason: "Source: $source");
         // Use closeTo for floating point comparisons due to potential precision differences
-        expect(tokens[0].literal, closeTo(expectedValue, 1e-9), reason: "Source: $source");
+        expect(
+          tokens[0].literal,
+          closeTo(expectedValue, 1e-9),
+          reason: "Source: $source",
+        );
       }
     });
 
@@ -229,7 +358,15 @@ print(x) # Another comment
       final source = '1.2e3+5'; // 1200.0 + 5
       final lexer = Lexer(source);
       final tokens = lexer.scanTokens();
-      expect(tokens.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.PLUS, TokenType.NUMBER, TokenType.EOF]));
+      expect(
+        tokens.map((t) => t.type).toList(),
+        equals([
+          TokenType.NUMBER,
+          TokenType.PLUS,
+          TokenType.NUMBER,
+          TokenType.EOF,
+        ]),
+      );
       expect(tokens[0].literal, 1200.0);
       expect(tokens[2].literal, 5);
     });
@@ -251,55 +388,125 @@ print(x) # Another comment
         expect(tokens.length, 2, reason: "Source: $source"); // Number + EOF
         expect(tokens[0].type, TokenType.NUMBER, reason: "Source: $source");
         expect(tokens[0].lexeme, source, reason: "Source: $source");
-        expect(tokens[0].literal, closeTo(expectedValue, 1e-9), reason: "Source: $source");
+        expect(
+          tokens[0].literal,
+          closeTo(expectedValue, 1e-9),
+          reason: "Source: $source",
+        );
       }
     });
 
     test('should distinguish DOT from start of float', () {
-        final lexer1 = Lexer('.');
-        final tokens1 = lexer1.scanTokens();
-        expect(tokens1.map((t)=>t.type).toList(), equals([TokenType.DOT, TokenType.EOF]));
+      final lexer1 = Lexer('.');
+      final tokens1 = lexer1.scanTokens();
+      expect(
+        tokens1.map((t) => t.type).toList(),
+        equals([TokenType.DOT, TokenType.EOF]),
+      );
 
-        final lexer2 = Lexer('.5');
-        final tokens2 = lexer2.scanTokens();
-        expect(tokens2.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.EOF]));
-        expect(tokens2[0].literal, 0.5);
+      final lexer2 = Lexer('.5');
+      final tokens2 = lexer2.scanTokens();
+      expect(
+        tokens2.map((t) => t.type).toList(),
+        equals([TokenType.NUMBER, TokenType.EOF]),
+      );
+      expect(tokens2[0].literal, 0.5);
 
-        final lexer3 = Lexer('obj.attr');
-        final tokens3 = lexer3.scanTokens();
-        expect(tokens3.map((t)=>t.type).toList(), equals([TokenType.IDENTIFIER, TokenType.DOT, TokenType.IDENTIFIER, TokenType.EOF]));
+      final lexer3 = Lexer('obj.attr');
+      final tokens3 = lexer3.scanTokens();
+      expect(
+        tokens3.map((t) => t.type).toList(),
+        equals([
+          TokenType.IDENTIFIER,
+          TokenType.DOT,
+          TokenType.IDENTIFIER,
+          TokenType.EOF,
+        ]),
+      );
     });
 
-     test('should handle number ending with dot correctly', () {
-         // Python tokenizer allows "1.". Let's see if our parser does.
-         final lexer = Lexer('1.');
-         final tokens = lexer.scanTokens();
-         expect(tokens.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.EOF]));
-         expect(tokens[0].literal, 1.0);
+    test('should handle number ending with dot correctly', () {
+      // Python tokenizer allows "1.". Let's see if our parser does.
+      final lexer = Lexer('1.');
+      final tokens = lexer.scanTokens();
+      expect(
+        tokens.map((t) => t.type).toList(),
+        equals([TokenType.NUMBER, TokenType.EOF]),
+      );
+      expect(tokens[0].literal, 1.0);
 
-          final lexer2 = Lexer('1. + 2');
-         final tokens2 = lexer2.scanTokens();
-         expect(tokens2.map((t)=>t.type).toList(), equals([TokenType.NUMBER, TokenType.PLUS, TokenType.NUMBER, TokenType.EOF]));
-         expect(tokens2[0].literal, 1.0);
-     });
+      final lexer2 = Lexer('1. + 2');
+      final tokens2 = lexer2.scanTokens();
+      expect(
+        tokens2.map((t) => t.type).toList(),
+        equals([
+          TokenType.NUMBER,
+          TokenType.PLUS,
+          TokenType.NUMBER,
+          TokenType.EOF,
+        ]),
+      );
+      expect(tokens2[0].literal, 1.0);
+    });
 
     test('should throw LexerError for invalid dot/exponent combinations', () {
-       expect(() => Lexer('1.e').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
-       final tokensDot = Lexer('.').scanTokens();
-       expect(tokensDot.map((t)=>t.type).toList(), equals([TokenType.DOT, TokenType.EOF]));
+      expect(
+        () => Lexer('1.e').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('exponent lacks digits'),
+          ),
+        ),
+      );
+      final tokensDot = Lexer('.').scanTokens();
+      expect(
+        tokensDot.map((t) => t.type).toList(),
+        equals([TokenType.DOT, TokenType.EOF]),
+      );
     });
 
     test('should throw LexerError for invalid scientific notation', () {
       // 'e' without digits
-      expect(() => Lexer('1e').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
+      expect(
+        () => Lexer('1e').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('exponent lacks digits'),
+          ),
+        ),
+      );
       // 'e' with sign but no digits
-      expect(() => Lexer('1e+').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
-      expect(() => Lexer('1.5e-').scanTokens(), throwsA(isA<LexerError>().having((e) => e.message, 'message', contains('exponent lacks digits'))));
+      expect(
+        () => Lexer('1e+').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('exponent lacks digits'),
+          ),
+        ),
+      );
+      expect(
+        () => Lexer('1.5e-').scanTokens(),
+        throwsA(
+          isA<LexerError>().having(
+            (e) => e.message,
+            'message',
+            contains('exponent lacks digits'),
+          ),
+        ),
+      );
       // Multiple 'e's (second e treated as identifier or error) - current behavior might vary
       // expect(() => Lexer('1e5e2').scanTokens(), throwsA(isA<LexerError>())); // Or parses as 1e5 then identifier 'e2'
       // Dot after 'e'
-      expect(() => Lexer('1e.5').scanTokens(), throwsA(isA<LexerError>())); // Should fail after 'e' parsing digits
-
+      expect(
+        () => Lexer('1e.5').scanTokens(),
+        throwsA(isA<LexerError>()),
+      ); // Should fail after 'e' parsing digits
     });
   });
 }

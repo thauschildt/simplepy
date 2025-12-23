@@ -51,8 +51,8 @@ ParseResult parseAndCollectErrors(String source) {
 }
 
 String printStatements(List<Stmt> statements) {
-   final printer = AstPrinter();
-   return statements.map((stmt) => printer.printStmt(stmt)).join('\n');
+  final printer = AstPrinter();
+  return statements.map((stmt) => printer.printStmt(stmt)).join('\n');
 }
 
 void main() {
@@ -69,7 +69,7 @@ void main() {
       expect(parseAndPrint(source), equals(expectedAstString));
     });
 
-     test('should parse augmented assignment', () {
+    test('should parse augmented assignment', () {
       final source = 'count += 1';
       // AST Printer uses 'aug_assign +=' format
       final expectedAstString = '(expr_stmt (aug_assign += count 1))';
@@ -95,7 +95,7 @@ if x > 0:
       );
     });
 
-     test('should parse function definition', () {
+    test('should parse function definition', () {
       final source = '''
 def add(a, b=1):
   return a + b
@@ -110,23 +110,28 @@ def add(a, b=1):
       );
     });
 
-     test('should parse function call', () {
+    test('should parse function call', () {
       final source = 'print("hello", end="")';
       // AST Printer uses 'call <callee>' and lists args
       final expectedAstString = "(expr_stmt (call print 'hello' end=''))";
       expect(parseAndPrint(source), equals(expectedAstString));
-     });
+    });
 
     test('Parser should report ParseError for invalid token sequences', () {
       final result1 = parseAndCollectErrors('..'); // Two dots
-      expect(result1.hasErrors, isTrue); // Or potentially LexerError depending on exact error reporting
+      expect(
+        result1.hasErrors,
+        isTrue,
+      ); // Or potentially LexerError depending on exact error reporting
       // expect((result1.error as ParseError).message, contains("...")); // Specific message depends on where parser fails
 
       final result2 = parseAndCollectErrors('1..'); // Number followed by dot
       expect(result2.hasErrors, isTrue); // Expect parser error after number
       // expect((result2.error as ParseError).message, contains("..."));
 
-      final result3 = parseAndCollectErrors('.e5'); // Dot followed by identifier
+      final result3 = parseAndCollectErrors(
+        '.e5',
+      ); // Dot followed by identifier
       expect(result3.hasErrors, isTrue); // Expect parser error after dot
       // expect((result3.error as ParseError).message, contains("..."));
 
@@ -138,139 +143,152 @@ def add(a, b=1):
     });
 
     test('lambda syntax errors (reported by parser)', () {
-        final result1 = parseAndCollectErrors('lambda x'); // Missing colon
-        expect(result1.hasErrors, isTrue);
-        expect(result1.errors.first, contains("Expect ':' after lambda parameters"));
+      final result1 = parseAndCollectErrors('lambda x'); // Missing colon
+      expect(result1.hasErrors, isTrue);
+      expect(
+        result1.errors.first,
+        contains("Expect ':' after lambda parameters"),
+      );
 
-        final result2 = parseAndCollectErrors('lambda :'); // Missing expression
-        expect(result2.hasErrors, isTrue);
-        expect(result2.errors.first, contains("Expect expression"));
-     });
+      final result2 = parseAndCollectErrors('lambda :'); // Missing expression
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Expect expression"));
+    });
   });
 
   group('Comprehensions', () {
     test('should parse simple list comprehension', () {
-        final source = '[i for i in range(5)]';
-        final expectedAstString = '(expr_stmt (list_comp (elt: i,  generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = '[i for i in range(5)]';
+      final expectedAstString =
+          '(expr_stmt (list_comp (elt: i,  generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse list comprehension with for-if-if-for-if', () {
-        final source = '[i for i in range(5) if i>0 if i%2==0 for j in range(5) if j<0]';
-        final expectedAstString = '(expr_stmt (list_comp (elt: i,  generators: [comprehension(target=i, iter=(call range 5), ifs=[(> i 0), (== (% i 2) 0), ], ), comprehension(target=j, iter=(call range 5), ifs=[(< j 0), ])])))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source =
+          '[i for i in range(5) if i>0 if i%2==0 for j in range(5) if j<0]';
+      final expectedAstString =
+          '(expr_stmt (list_comp (elt: i,  generators: [comprehension(target=i, iter=(call range 5), ifs=[(> i 0), (== (% i 2) 0), ], ), comprehension(target=j, iter=(call range 5), ifs=[(< j 0), ])])))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse simple set comprehension', () {
-        final source = '{i for i in range(5)}';
-        final expectedAstString = '(expr_stmt (set_comp (elt: i, generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
-    
+      final source = '{i for i in range(5)}';
+      final expectedAstString =
+          '(expr_stmt (set_comp (elt: i, generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+
     test('should parse simple dict comprehension', () {
-        final source = '{i: i*i for i in range(5)}';
-        final expectedAstString = '(expr_stmt (dict_comp (key: i, value: (* i i), generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = '{i: i*i for i in range(5)}';
+      final expectedAstString =
+          '(expr_stmt (dict_comp (key: i, value: (* i i), generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
   });
 
   group('Slices', () {
     test('should parse x[a:b] slice', () {
-        final source = 'x[1:2]';
-        final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[1:2]';
+      final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[:] slice', () {
-        final source = 'x[:]';
-        final expectedAstString = '(expr_stmt (slice(x)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[:]';
+      final expectedAstString = '(expr_stmt (slice(x)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[::] slice', () {
-        final source = 'x[::]';
-        final expectedAstString = '(expr_stmt (slice(x)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[::]';
+      final expectedAstString = '(expr_stmt (slice(x)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[a:b:c] slice', () {
-        final source = 'x[1:2:3]';
-        final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2 step=3)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[1:2:3]';
+      final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2 step=3)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[a::c] slice', () {
-        final source = 'x[1::3]';
-        final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[1::3]';
+      final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[a:b:] slice', () {
-        final source = 'x[1::3]';
-        final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[1::3]';
+      final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[:b:c] slice', () {
-        final source = 'x[:2:3]';
-        final expectedAstString = '(expr_stmt (slice(x upper=2 step=3)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[:2:3]';
+      final expectedAstString = '(expr_stmt (slice(x upper=2 step=3)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[a:] slice', () {
-        final source = 'x[1:]';
-        final expectedAstString = '(expr_stmt (slice(x lower=1)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[1:]';
+      final expectedAstString = '(expr_stmt (slice(x lower=1)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[a::] slice', () {
-        final source = 'x[1::]';
-        final expectedAstString = '(expr_stmt (slice(x lower=1)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[1::]';
+      final expectedAstString = '(expr_stmt (slice(x lower=1)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[:b:] slice', () {
-        final source = 'x[:2:]';
-        final expectedAstString = '(expr_stmt (slice(x upper=2)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[:2:]';
+      final expectedAstString = '(expr_stmt (slice(x upper=2)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
     test('should parse x[::c] slice', () {
-        final source = 'x[::3]';
-        final expectedAstString = '(expr_stmt (slice(x step=3)))';
-        expect(parseAndPrint(source), equals(expectedAstString));
-      });
+      final source = 'x[::3]';
+      final expectedAstString = '(expr_stmt (slice(x step=3)))';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
   });
 
   group('Detect unexpected token errors', () {
-
     test('unexpected token after expression', () {
-        final result1 = parseAndCollectErrors('x = 1 2');
-        expect(result1.hasErrors, isTrue);
-        expect(result1.errors.first, contains("Unexpected token"));
+      final result1 = parseAndCollectErrors('x = 1 2');
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
 
-        final result2 = parseAndCollectErrors('2 ""');
-        expect(result2.hasErrors, isTrue);
-        expect(result2.errors.first, contains("Unexpected token"));
-     });
+      final result2 = parseAndCollectErrors('2 ""');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
+    });
 
     test('unexpected token in if statements', () {
-        final result1 = parseAndCollectErrors('if 1==1:\n  print(2) else: print(3)');
-        expect(result1.hasErrors, isTrue);
-        expect(result1.errors.first, contains("Unexpected token"));
+      final result1 = parseAndCollectErrors(
+        'if 1==1:\n  print(2) else: print(3)',
+      );
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
 
-        final result2 = parseAndCollectErrors('if 1==1: print(2) 3');
-        expect(result2.hasErrors, isTrue);
-        expect(result2.errors.first, contains("Unexpected token"));
+      final result2 = parseAndCollectErrors('if 1==1: print(2) 3');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
 
-        final result3 = parseAndCollectErrors('if 1==1: print(2)\nelse: print(3) 4');
-        expect(result3.hasErrors, isTrue);
-        expect(result3.errors.first, contains("Unexpected token"));
+      final result3 = parseAndCollectErrors(
+        'if 1==1: print(2)\nelse: print(3) 4',
+      );
+      expect(result3.hasErrors, isTrue);
+      expect(result3.errors.first, contains("Unexpected token"));
 
-        final result4 = parseAndCollectErrors('if 1==1: print(2)\nelif 2==3: print(3) else'); // Missing expression
-        expect(result4.hasErrors, isTrue);
-        expect(result4.errors.first, contains("Unexpected token"));
-     });
+      final result4 = parseAndCollectErrors(
+        'if 1==1: print(2)\nelif 2==3: print(3) else',
+      ); // Missing expression
+      expect(result4.hasErrors, isTrue);
+      expect(result4.errors.first, contains("Unexpected token"));
+    });
 
-     test('unexpected token in single-line while, for', () {
-        final result1 = parseAndCollectErrors('while 1<0: x=2 3');
-        expect(result1.hasErrors, isTrue);
-        expect(result1.errors.first, contains("Unexpected token"));
+    test('unexpected token in single-line while, for', () {
+      final result1 = parseAndCollectErrors('while 1<0: x=2 3');
+      expect(result1.hasErrors, isTrue);
+      expect(result1.errors.first, contains("Unexpected token"));
 
-        final result2 = parseAndCollectErrors('for x in range(1): print(x):');
-        expect(result2.hasErrors, isTrue);
-        expect(result2.errors.first, contains("Unexpected token"));
-     });
+      final result2 = parseAndCollectErrors('for x in range(1): print(x):');
+      expect(result2.hasErrors, isTrue);
+      expect(result2.errors.first, contains("Unexpected token"));
+    });
 
-     test('unexpected token after return', () {
+    test('unexpected token after return', () {
       final result1 = parseAndCollectErrors('return 1 2');
       expect(result1.hasErrors, isTrue);
       expect(result1.errors.first, contains("Unexpected token"));

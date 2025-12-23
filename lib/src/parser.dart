@@ -57,7 +57,9 @@ class Parser {
     List<Stmt> statements = [];
     while (!isAtEnd()) {
       // Skip leading newlines between statements at the top level
-      while (match([TokenType.NEWLINE])) { /* consume */ }
+      while (match([TokenType.NEWLINE])) {
+        /* consume */
+      }
       if (isAtEnd()) break;
       try {
         Stmt? stmt = declaration();
@@ -70,7 +72,7 @@ class Parser {
           synchronize(); // Ensure we are at a recovery point
         }
       } on ParseError catch (e) {
-        if (errorCallback!=null) {
+        if (errorCallback != null) {
           errorCallback!(e.toString());
         } else {
           print(e.toString());
@@ -104,7 +106,10 @@ class Parser {
     Token name = consume(TokenType.IDENTIFIER, "Expect class name.");
     VariableExpr? superclass;
     if (match([TokenType.LEFT_PAREN])) {
-      Token superclassName = consume(TokenType.IDENTIFIER, "Expect superclass name.");
+      Token superclassName = consume(
+        TokenType.IDENTIFIER,
+        "Expect superclass name.",
+      );
       superclass = VariableExpr(superclassName);
       consume(TokenType.RIGHT_PAREN, "Expect ')' after superclass name.");
     }
@@ -114,18 +119,23 @@ class Parser {
     List<FunctionStmt> methods = [];
     while (!check(TokenType.DEDENT) && !isAtEnd()) {
       // Skip blank lines within the class body
-      while(match([TokenType.NEWLINE])) {/* consume */}
+      while (match([TokenType.NEWLINE])) {
+        /* consume */
+      }
       if (check(TokenType.DEDENT) || isAtEnd()) break;
       if (match([TokenType.DEF])) {
         // Pass "method" to indicate context if needed by functionDeclaration
         methods.add(functionDeclaration("method") as FunctionStmt);
-      }  else if (match([TokenType.PASS])) {
+      } else if (match([TokenType.PASS])) {
         if (!check(TokenType.DEDENT)) {
           match([TokenType.NEWLINE]);
         }
         continue;
       } else {
-        throw error(peek(),"Only method definitions (def) or 'pass' are allowed inside a class body for now.");
+        throw error(
+          peek(),
+          "Only method definitions (def) or 'pass' are allowed inside a class body for now.",
+        );
       }
       // Consume optional newline before next method or dedent
       if (!check(TokenType.DEDENT)) {
@@ -232,10 +242,16 @@ class Parser {
             error(peek(), "Positional/optional parameter cannot follow *args.");
           }
           if (parsingKwargs) {
-            error(peek(), "Positional/optional parameter cannot follow **kwargs.");
+            error(
+              peek(),
+              "Positional/optional parameter cannot follow **kwargs.",
+            );
           }
 
-          Token paramName = consume(TokenType.IDENTIFIER, "Expect parameter name.");
+          Token paramName = consume(
+            TokenType.IDENTIFIER,
+            "Expect parameter name.",
+          );
 
           if (match([TokenType.EQUAL])) {
             // Optional parameter
@@ -297,7 +313,7 @@ class Parser {
     } else if (match([TokenType.GLOBAL])) {
       stmt = globalStatement();
     } else if (match([TokenType.NONLOCAL])) {
-      stmt = nonlocalStatement(); 
+      stmt = nonlocalStatement();
     } else {
       stmt = expressionStatement();
     }
@@ -357,7 +373,9 @@ class Parser {
     if (peek().type == TokenType.NEWLINE) {
       thenBranch = BlockStmt(block()); // standard block
     } else {
-      thenBranch = BlockStmt([statement()]); // single-line statement as block with one statement
+      thenBranch = BlockStmt([
+        statement(),
+      ]); // single-line statement as block with one statement
       if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
         throw error(peek(), "invalid syntax.");
       }
@@ -431,7 +449,7 @@ class Parser {
         throw error(peek(), "invalid syntax");
       }
       if (peek().type == TokenType.NEWLINE) {
-        consume(TokenType.NEWLINE,'');
+        consume(TokenType.NEWLINE, '');
       }
     }
     return WhileStmt(condition, body);
@@ -457,13 +475,13 @@ class Parser {
         throw error(peek(), "invalid syntax");
       }
       if (peek().type == TokenType.NEWLINE) {
-        consume(TokenType.NEWLINE,'');
+        consume(TokenType.NEWLINE, '');
       }
     }
     return ForStmt(variable, iterable, body);
   }
 
-   /// Parses a pass statement.
+  /// Parses a pass statement.
   /// passStmt ::= "pass" ;
   Stmt passStatement() {
     return PassStmt(previous());
@@ -486,7 +504,9 @@ class Parser {
   Stmt globalStatement() {
     List<Token> names = [];
     do {
-      names.add(consume(TokenType.IDENTIFIER, "Expect variable name after 'global'."));
+      names.add(
+        consume(TokenType.IDENTIFIER, "Expect variable name after 'global'."),
+      );
     } while (match([TokenType.COMMA]));
     return GlobalStmt(names);
   }
@@ -496,16 +516,23 @@ class Parser {
   Stmt nonlocalStatement() {
     List<Token> names = [];
     do {
-      names.add(consume(TokenType.IDENTIFIER, "Expect variable name after 'nonlocal'."));
+      names.add(
+        consume(TokenType.IDENTIFIER, "Expect variable name after 'nonlocal'."),
+      );
     } while (match([TokenType.COMMA]));
     return NonlocalStmt(names);
   }
 
   void _ensureEndOfStatement() {
-  if (!isAtEnd() && ![TokenType.NEWLINE, TokenType.DEDENT, TokenType.EOF].contains(peek().type)) {
-    throw error(peek(), "Invalid syntax. Unexpected token after statement.");
+    if (!isAtEnd() &&
+        ![
+          TokenType.NEWLINE,
+          TokenType.DEDENT,
+          TokenType.EOF,
+        ].contains(peek().type)) {
+      throw error(peek(), "Invalid syntax. Unexpected token after statement.");
+    }
   }
-}
 
   /// Parses an expression statement.
   /// exprStmt ::= expression ;
@@ -526,17 +553,28 @@ class Parser {
   /// target     ::= IDENTIFIER | callOrGet "[" expression "]" ; // Simplified target
   /// augAssignOp::= "+=" | "-=" | "*=" | "/=" | "//=" | "%=" | "**=" | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
   Expr assignment() {
-    Expr expr = logicOr(); // Start with lowest precedence (or maybe ternary later)
+    Expr expr =
+        logicOr(); // Start with lowest precedence (or maybe ternary later)
 
     if (match([
-      TokenType.PLUS_EQUAL, TokenType.MINUS_EQUAL, TokenType.STAR_EQUAL, TokenType.SLASH_EQUAL,
-      TokenType.PERCENT_EQUAL, TokenType.STAR_STAR_EQUAL, TokenType.SLASH_SLASH_EQUAL,
-      TokenType.AMPERSAND_EQUAL, TokenType.PIPE_EQUAL, TokenType.CARET_EQUAL,
-      TokenType.LEFT_SHIFT_EQUAL, TokenType.RIGHT_SHIFT_EQUAL,
+      TokenType.PLUS_EQUAL,
+      TokenType.MINUS_EQUAL,
+      TokenType.STAR_EQUAL,
+      TokenType.SLASH_EQUAL,
+      TokenType.PERCENT_EQUAL,
+      TokenType.STAR_STAR_EQUAL,
+      TokenType.SLASH_SLASH_EQUAL,
+      TokenType.AMPERSAND_EQUAL,
+      TokenType.PIPE_EQUAL,
+      TokenType.CARET_EQUAL,
+      TokenType.LEFT_SHIFT_EQUAL,
+      TokenType.RIGHT_SHIFT_EQUAL,
     ])) {
       Token operator = previous();
       Expr value = assignment();
-      if (expr is VariableExpr || expr is AttributeGetExpr || expr is IndexGetExpr) {
+      if (expr is VariableExpr ||
+          expr is AttributeGetExpr ||
+          expr is IndexGetExpr) {
         return AugAssignExpr(expr, operator, value);
       }
       error(operator, "Invalid assignment target.");
@@ -599,8 +637,13 @@ class Parser {
     Expr expr = lambda();
     // Add 'in' operator here? Or handle separately. Let's keep it simple for now.
     while (match([
-      TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL,
-      TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL, TokenType.IN,
+      TokenType.GREATER,
+      TokenType.GREATER_EQUAL,
+      TokenType.LESS,
+      TokenType.LESS_EQUAL,
+      TokenType.BANG_EQUAL,
+      TokenType.EQUAL_EQUAL,
+      TokenType.IN,
     ])) {
       Token operator = previous();
       Expr right = lambda();
@@ -615,7 +658,8 @@ class Parser {
     if (match([TokenType.LAMBDA])) {
       Token keyword = previous();
       // Parse parameters directly (no parentheses needed for lambda)
-      List<Parameter> parameters = _parseLambdaParameters(); // Need specific parameter parser
+      List<Parameter> parameters =
+          _parseLambdaParameters(); // Need specific parameter parser
       consume(TokenType.COLON, "Expect ':' after lambda parameters.");
       Expr body = expression(); // Parse the single expression body
       return LambdaExpr(keyword, parameters, body);
@@ -635,24 +679,44 @@ class Parser {
     // Logic similar to parsing parameters in functionDeclaration(), but stops at COLON instead of RIGHT_PAREN
     bool parsingOptional = false;
     // TODO: check correct order of positional, optional, *args, **kwargs
-    do { // Use do-while because we checked COLON already, so at least one param expected if not empty
-      if (parameters.length >= 255) throw error(peek(), "Can't have more than 255 parameters.");
-      if (match([TokenType.STAR_STAR])) { // **kwargs
+    do {
+      // Use do-while because we checked COLON already, so at least one param expected if not empty
+      if (parameters.length >= 255)
+        throw error(peek(), "Can't have more than 255 parameters.");
+      if (match([TokenType.STAR_STAR])) {
+        // **kwargs
         parsingOptional = false;
-        Token paramName = consume(TokenType.IDENTIFIER, "Expect identifier after '**'.");
+        Token paramName = consume(
+          TokenType.IDENTIFIER,
+          "Expect identifier after '**'.",
+        );
         parameters.add(StarStarKwargsParameter(paramName));
-      } else if (match([TokenType.STAR])) { // *args
+      } else if (match([TokenType.STAR])) {
+        // *args
         parsingOptional = false;
-        Token paramName = consume(TokenType.IDENTIFIER, "Expect identifier after '*'.");
+        Token paramName = consume(
+          TokenType.IDENTIFIER,
+          "Expect identifier after '*'.",
+        );
         parameters.add(StarArgsParameter(paramName));
-      } else { // Required or Optional
-        Token paramName = consume(TokenType.IDENTIFIER, "Expect parameter name.");
-        if (match([TokenType.EQUAL])) { // Optional
+      } else {
+        // Required or Optional
+        Token paramName = consume(
+          TokenType.IDENTIFIER,
+          "Expect parameter name.",
+        );
+        if (match([TokenType.EQUAL])) {
+          // Optional
           parsingOptional = true;
           Expr defaultValue = expression();
           parameters.add(OptionalParameter(paramName, defaultValue));
-        } else { // Required
-          if (parsingOptional) throw error(paramName, "Non-default argument follows default argument.");
+        } else {
+          // Required
+          if (parsingOptional)
+            throw error(
+              paramName,
+              "Non-default argument follows default argument.",
+            );
           parameters.add(RequiredParameter(paramName));
         }
       }
@@ -700,7 +764,7 @@ class Parser {
 
   /// Parses bitwise shift expressions. ('<<', '>>')
   /// shift ::= addsub ( ("<<" | ">>") addsub )* ;
-  Expr shift() { 
+  Expr shift() {
     Expr expr = addsub();
     while (match([TokenType.LEFT_SHIFT, TokenType.RIGHT_SHIFT])) {
       Token operator = previous();
@@ -727,8 +791,10 @@ class Parser {
   Expr factor() {
     Expr expr = unary();
     while (match([
-      TokenType.SLASH, TokenType.SLASH_SLASH,
-      TokenType.STAR, TokenType.PERCENT,
+      TokenType.SLASH,
+      TokenType.SLASH_SLASH,
+      TokenType.STAR,
+      TokenType.PERCENT,
     ])) {
       Token operator = previous();
       Expr right = unary();
@@ -766,16 +832,19 @@ class Parser {
   Expr call() {
     Expr expr = primary(); // Parse the base callable/object
     while (true) {
-    // Allow chaining: func()(...) or list[i](...)
+      // Allow chaining: func()(...) or list[i](...)
       if (match([TokenType.LEFT_PAREN])) {
         expr = finishCall(expr); // expr becomes the CallExpr node
-      } else if (match([TokenType.LEFT_BRACKET])) { // index or slice
+      } else if (match([TokenType.LEFT_BRACKET])) {
+        // index or slice
         expr = finishIndexOrSlice(expr); // expr becomes the GetExpr node
-      }  else if (match([TokenType.DOT])) {
-        Token name = consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
+      } else if (match([TokenType.DOT])) {
+        Token name = consume(
+          TokenType.IDENTIFIER,
+          "Expect property name after '.'.",
+        );
         expr = AttributeGetExpr(expr, name);
-      }
-      else {
+      } else {
         break; // No more calls, indexing, or dot
       }
     }
@@ -820,23 +889,31 @@ class Parser {
               }
             } else if (content[i] == ':' && braceLevel == 1) {
               // Found colon for format specifier at the top level of this expression
-              if (colonPos == -1) { // save only first colon on top level
-                  colonPos = i;
+              if (colonPos == -1) {
+                // save only first colon on top level
+                colonPos = i;
               }
             } else if (content[i] == '\'' || content[i] == '"') {
               String quote = content[i];
               i++;
-              while(i < length && content[i] != quote) {
+              while (i < length && content[i] != quote) {
                 if (content[i] == '\\' && i + 1 < length) i++;
                 i++;
               }
-              if (i >= length) throw ParseError(fstringToken, "Unterminated string inside f-string expression.");
+              if (i >= length)
+                throw ParseError(
+                  fstringToken,
+                  "Unterminated string inside f-string expression.",
+                );
             }
             i++;
           } // End of the inner loop looking for '}'
 
           if (exprEnd == -1) {
-            throw ParseError(fstringToken, "Unterminated expression in f-string (missing '}')");
+            throw ParseError(
+              fstringToken,
+              "Unterminated expression in f-string (missing '}')",
+            );
           }
 
           // --- Extract expression and format spec ---
@@ -851,7 +928,10 @@ class Parser {
           }
 
           if (exprString.isEmpty) {
-            throw ParseError(fstringToken, "Empty expression sequence in f-string is not allowed.");
+            throw ParseError(
+              fstringToken,
+              "Empty expression sequence in f-string is not allowed.",
+            );
           }
 
           // --- parse expression ---
@@ -859,18 +939,23 @@ class Parser {
           try {
             Lexer exprLexer = Lexer(exprString);
             List<Token> exprTokens = exprLexer.scanTokens();
-              if (exprTokens.isEmpty || exprTokens.first.type == TokenType.EOF) {
-                throw ParseError(fstringToken, "Empty expression in f-string.");
-              }
+            if (exprTokens.isEmpty || exprTokens.first.type == TokenType.EOF) {
+              throw ParseError(fstringToken, "Empty expression in f-string.");
+            }
             Parser exprParser = Parser(exprTokens);
             parsedExpr = exprParser.expression();
-            if (exprParser.current < exprTokens.length -1) {
-             Token unexpectedToken = exprTokens[exprParser.current];
-             throw ParseError(unexpectedToken,
-               "Unexpected token inside f-string expression near '${unexpectedToken.lexeme}' after parsing expression '$exprString'. Expected end of expression.");
+            if (exprParser.current < exprTokens.length - 1) {
+              Token unexpectedToken = exprTokens[exprParser.current];
+              throw ParseError(
+                unexpectedToken,
+                "Unexpected token inside f-string expression near '${unexpectedToken.lexeme}' after parsing expression '$exprString'. Expected end of expression.",
+              );
             }
-          } catch(e) {
-            throw ParseError(fstringToken, "Parser error within f-string expression: '$exprString' -> $e");
+          } catch (e) {
+            throw ParseError(
+              fstringToken,
+              "Parser error within f-string expression: '$exprString' -> $e",
+            );
           }
 
           parts.add(FStringExpressionPart(parsedExpr, formatSpec));
@@ -918,7 +1003,7 @@ class Parser {
           consume(TokenType.EQUAL, "Expect '=' after keyword argument name.");
           Expr value = expression();
           arguments.add(KeywordArgument(name, value));
-          positionalAllowed = false;  // No positionals after the first keyword
+          positionalAllowed = false; // No positionals after the first keyword
         } else {
           // Positional argument
           if (!positionalAllowed) {
@@ -937,12 +1022,14 @@ class Parser {
   /// index ::= "[" expression "]" ;
   Expr finishIndexOrSlice(Expr object) {
     Token bracket = previous(); // The '[' token
-    if (check(TokenType.COLON)) { // [:end] or [:] slice
+    if (check(TokenType.COLON)) {
+      // [:end] or [:] slice
       Expr slice = parseSlice(object, bracket, null);
       return slice;
     }
     Expr index = expression();
-    if (check(TokenType.COLON)) { // [start:end]or [start:end:step] or [start:] slice
+    if (check(TokenType.COLON)) {
+      // [start:end]or [start:end:step] or [start:] slice
       Expr slice = parseSlice(object, bracket, index);
       return slice;
     }
@@ -957,7 +1044,7 @@ class Parser {
   Expr parseSlice(Expr listExpr, Token bracket, Expr? start) {
     Expr? stop;
     Expr? step;
-      // Parse first colon
+    // Parse first colon
     consume(TokenType.COLON, "Expect ':' in slice.");
     // Parse stop (optional)
     if (!check(TokenType.COLON) && !check(TokenType.RIGHT_BRACKET)) {
@@ -1031,19 +1118,22 @@ class Parser {
       }
     }
     if (match([TokenType.SUPER])) {
-        Token keyword = previous();
-        consume(TokenType.LEFT_PAREN, "Expect '(' after 'super'.");
-        consume(TokenType.RIGHT_PAREN, "Expect ')' after 'super('.");
-        consume(TokenType.DOT, "Expect '.' after 'super'.");
-        Token method = consume(TokenType.IDENTIFIER, "Expect superclass method name.");
-        return SuperExpr(keyword, method);
+      Token keyword = previous();
+      consume(TokenType.LEFT_PAREN, "Expect '(' after 'super'.");
+      consume(TokenType.RIGHT_PAREN, "Expect ')' after 'super('.");
+      consume(TokenType.DOT, "Expect '.' after 'super'.");
+      Token method = consume(
+        TokenType.IDENTIFIER,
+        "Expect superclass method name.",
+      );
+      return SuperExpr(keyword, method);
     }
     if (match([TokenType.LEFT_BRACKET])) {
       // Check if it's a list comprehension
       int start = current - 1; // saveState();
       Token bracket = peek();
       if (peek().type == TokenType.RIGHT_BRACKET) {
-        consume(TokenType.RIGHT_BRACKET,'');
+        consume(TokenType.RIGHT_BRACKET, '');
         return ListLiteralExpr(bracket, []);
       }
       Expr expr = expression();
@@ -1054,10 +1144,12 @@ class Parser {
       } else {
         // List literal [ ... ]
         List<Expr> elements = [expr];
-        if (check(TokenType.COMMA)) { // no comma after first element? -> done
+        if (check(TokenType.COMMA)) {
+          // no comma after first element? -> done
           consume(TokenType.COMMA, "Expect ',' after list element.");
           do {
-            if (check(TokenType.RIGHT_BRACKET)) break; // Allow trailing comma: [1, 2, ]
+            if (check(TokenType.RIGHT_BRACKET))
+              break; // Allow trailing comma: [1, 2, ]
             elements.add(expression());
           } while (match([TokenType.COMMA]));
         }
@@ -1067,9 +1159,11 @@ class Parser {
     }
 
     if (match([TokenType.LEFT_BRACE])) {
-      int start = current - 1; // store current token position to be able to restart from here
+      int start =
+          current -
+          1; // store current token position to be able to restart from here
       Token brace = previous();
-      List<Expr> keys = [];  // Temp list for potential keys OR set elements
+      List<Expr> keys = []; // Temp list for potential keys OR set elements
       List<Expr> values = []; // Temp list for potential values
       bool isDict = false, isComprehension = false;
 
@@ -1089,12 +1183,15 @@ class Parser {
 
       if (isComprehension) {
         current = start; // reset parser to opening left brace
-        return isDict? dictComprehension() : setComprehension();
+        return isDict ? dictComprehension() : setComprehension();
       } else {
         do {
           if (check(TokenType.RIGHT_BRACE)) break;
-          consume(TokenType.COMMA,'invalid syntax. Perhaps you forgot a comma?');
-          Expr keyOrElement  = expression();
+          consume(
+            TokenType.COMMA,
+            'invalid syntax. Perhaps you forgot a comma?',
+          );
+          Expr keyOrElement = expression();
           if (isDict) {
             if (match([TokenType.COLON])) {
               Expr value = expression();
@@ -1104,21 +1201,31 @@ class Parser {
               // This means we previously parsed a set element, now mixing with dict entry
               throw error(previous(), "':' expected after dictionary key");
             }
-          } else { // store set element
+          } else {
+            // store set element
             keys.add(keyOrElement); // Store as potential set element
           }
         } while (true);
       }
-      consume(TokenType.RIGHT_BRACE, "Expect '}' after set elements or dictionary entries.");
+      consume(
+        TokenType.RIGHT_BRACE,
+        "Expect '}' after set elements or dictionary entries.",
+      );
       if (isDict) {
         if (keys.length != values.length) {
-            // Should not happen due to checks above, but safety first
-            throw error(brace, "Internal parser error: Mismatched keys/values in dictionary literal.");
+          // Should not happen due to checks above, but safety first
+          throw error(
+            brace,
+            "Internal parser error: Mismatched keys/values in dictionary literal.",
+          );
         }
         return DictLiteralExpr(brace, keys, values);
       } else {
-          // It's a set literal
-          return SetLiteralExpr(brace, keys); // keys list now contains set elements
+        // It's a set literal
+        return SetLiteralExpr(
+          brace,
+          keys,
+        ); // keys list now contains set elements
       }
     }
 
@@ -1152,7 +1259,7 @@ class Parser {
         consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
         return GroupingExpr(expr);
       }
-    } 
+    }
 
     if (match([TokenType.IDENTIFIER])) {
       // Check if it's a built-in function name we didn't make a keyword?
@@ -1174,7 +1281,10 @@ class Parser {
     List<ComprehensionClause> clauses = [];
     // Parse 'for' clause
     if (match([TokenType.FOR])) {
-      Token name = consume(TokenType.IDENTIFIER, "Expect identifier after 'for'.");
+      Token name = consume(
+        TokenType.IDENTIFIER,
+        "Expect identifier after 'for'.",
+      );
       consume(TokenType.IN, "Expect 'in' after for target.");
       Expr iterable = call();
       clauses.add(ForClause(name, iterable));
@@ -1189,7 +1299,10 @@ class Parser {
 
   /// Parses a list comprehension (including the brackets)
   Expr listComprehension() {
-    consume(TokenType.LEFT_BRACKET, "Expect '[' at start of list comprehension.");
+    consume(
+      TokenType.LEFT_BRACKET,
+      "Expect '[' at start of list comprehension.",
+    );
     // Parse the output expression
     Expr output = expression();
     // Parse the comprehensions
@@ -1199,10 +1312,13 @@ class Parser {
       if (newClauses.isEmpty) break;
       clauses.addAll(newClauses);
     }
-    consume(TokenType.RIGHT_BRACKET, "Expect ']' at end of list comprehension.");
+    consume(
+      TokenType.RIGHT_BRACKET,
+      "Expect ']' at end of list comprehension.",
+    );
     return ListComprehensionExpr(output, clauses);
   }
-  
+
   /// Parses a dict comprehension (including the braces)
   Expr dictComprehension() {
     consume(TokenType.LEFT_BRACE, "Expect '{' at start of dict comprehension.");
@@ -1291,7 +1407,14 @@ class Parser {
 
   /// Returns the current token without consuming it.
   Token previous() {
-    if (current == 0) return Token(TokenType.EOF, "", null, 0, 0); // Should not happen in normal flow
+    if (current == 0)
+      return Token(
+        TokenType.EOF,
+        "",
+        null,
+        0,
+        0,
+      ); // Should not happen in normal flow
     return tokens[current - 1];
   }
 
