@@ -30,6 +30,8 @@ abstract class ExprVisitor<R> {
   R visitIndexGetExpr(IndexGetExpr expr);
   /// Visits a [IndexSetExpr] node (e.g., `object[index] = value`).
   R visitIndexSetExpr(IndexSetExpr expr);
+  /// Visits a [SliceExpr] node (e.g., `object[start:stop:step]`).
+  R visitSliceExpr(SliceExpr expr);
   /// Visits a [AttributeGetExpr] node (e.g., `obj.attr`).
   R visitAttributeGetExpr(AttributeGetExpr expr);
   /// Visits a [AttributeSetExpr] node (e.g., `obj.attr = value`).
@@ -58,8 +60,12 @@ abstract class ExprVisitor<R> {
   R visitSetLiteralExpr(SetLiteralExpr expr);
   /// Visits an f-string (e.g. f"{x}")
   R visitFStringExpr(FStringExpr expr);
+  /// Visits a [ListComprehensionExpr] node (e.g., `[i for i in range(5)]`).
   R visitListComprehensionExpr(ListComprehensionExpr expr);
+  /// Visits a [DictComprehensionExpr] node (e.g., `{[}i: i*i for i in range(5)}`).
   R visitDictComprehensionExpr(DictComprehensionExpr expr);
+  /// Visits a [ListComprehensionExpr] node (e.g., `{i for i in range(5)]`).
+  R visitSetComprehensionExpr(SetComprehensionExpr expr);
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -142,6 +148,20 @@ class IndexGetExpr extends Expr {
   IndexGetExpr(this.object, this.bracket, this.index);
   @override
   R accept<R>(ExprVisitor<R> visitor) => visitor.visitIndexGetExpr(this);
+}
+
+/// Represents a slice expression to get part of a list (e.g., `object[start:stop:step]`).
+class SliceExpr implements Expr {
+  final Expr list;
+  final Expr? start;
+  final Expr? stop;
+  final Expr? step;
+  final Token bracket;
+
+  SliceExpr(this.list, this.start, this.stop, this.step, this.bracket);
+
+  @override
+  R accept<R>(ExprVisitor<R> visitor) => visitor.visitSliceExpr(this);
 }
 
 /// Represents an item assignment expression using indexing (e.g., `object[index] = value`).
@@ -313,6 +333,7 @@ abstract class ComprehensionVisitor<R> {
   R visitIfClause(IfClause clause);
 }
 
+
 class ForClause implements ComprehensionClause {
   final Token name;
   final Expr iterable;
@@ -332,6 +353,7 @@ class IfClause implements ComprehensionClause {
   }
 }
 
+/// Represents a list comprehension expression (e.g., `[i for i in range(5) if i%2==0]`).
 class ListComprehensionExpr implements Expr {
   final Expr output;
   final List<ComprehensionClause> clauses;
@@ -344,6 +366,7 @@ class ListComprehensionExpr implements Expr {
   }
 }
 
+/// Represents a list comprehension expression (e.g., `{i: i*i for i in range(5) if i%2==0}`).
 class DictComprehensionExpr implements Expr {
   final Expr key;
   final Expr value;
@@ -354,6 +377,19 @@ class DictComprehensionExpr implements Expr {
   @override
   R accept<R>(ExprVisitor<R> visitor) {
     return visitor.visitDictComprehensionExpr(this);
+  }
+}
+
+/// Represents a set comprehension expression (e.g., `{i for i in range(5) if i%2==0}`).
+class SetComprehensionExpr implements Expr {
+  final Expr element;
+  final List<ComprehensionClause> clauses;
+
+  SetComprehensionExpr(this.element, this.clauses);
+
+  @override
+  R accept<R>(ExprVisitor<R> visitor) {
+    return visitor.visitSetComprehensionExpr(this);
   }
 }
 
@@ -862,14 +898,60 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
   }
   
   @override
-  String visitDictComprehensionExpr(DictComprehensionExpr expr) {
-    // TODO: implement visitDictComprehensionExpr
-    throw UnimplementedError();
+  String visitDictComprehensionExpr(DictComprehensionExpr expr) => parenthesize(
+    "dict_comp", [
+      "(key: ${printExpr(expr.key)},",
+      "value: ${printExpr(expr.value)},",
+      "generators: ${_printComprehensionClauses(expr.clauses)})",
+    ]);
+  
+  @override
+  String visitListComprehensionExpr(ListComprehensionExpr expr) => parenthesize(
+    "list_comp", [
+      "(elt: ${printExpr(expr.output)}, ",
+      "generators: ${_printComprehensionClauses(expr.clauses)})",
+    ]);
+
+  @override
+  String visitSetComprehensionExpr(SetComprehensionExpr expr) => parenthesize(
+    "set_comp", [
+      "(elt: ${printExpr(expr.element)},",
+      "generators: ${_printComprehensionClauses(expr.clauses)})",
+    ]);
+
+  String _printComprehensionClauses(List<ComprehensionClause> clauses) {
+    StringBuffer buffer = StringBuffer();
+    buffer.write("[");
+    bool forClosed = true, ifClosed = true;
+    for (int i = 0; i < clauses.length; i++) {
+      ComprehensionClause clause = clauses[i];
+      if (clause is ForClause) {
+        if (!ifClosed) buffer.write("], ");
+        if (!forClosed) buffer.write("), ");
+        ifClosed = true;
+        forClosed = true;
+        buffer.write("comprehension(target=${clause.name.lexeme}, iter=${printExpr(clause.iterable)}, ifs=[");
+        ifClosed = false;
+        forClosed = false;
+      } else if (clause is IfClause) {
+        buffer.write("${printExpr(clause.condition)}, ");
+        ifClosed=false;
+      }
+    }
+    buffer.write("])]");
+        
+    return buffer.toString();
   }
   
   @override
-  String visitListComprehensionExpr(ListComprehensionExpr expr) {
-    // TODO: implement visitListComprehensionExpr
-    throw UnimplementedError();
+  String visitSliceExpr(SliceExpr expr) {
+    List<String> param=[printExpr(expr.list)];
+    if (expr.start != null) param.add("lower=${printExpr(expr.start!)}");
+    if (expr.stop != null) param.add("upper=${printExpr(expr.stop!)}");
+    if (expr.step != null) param.add("step=${printExpr(expr.step!)}");
+    return parenthesize(
+      "slice(${param.join(" ")})",
+      [],
+    );
   }
 }

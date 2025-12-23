@@ -2788,9 +2788,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   Object? visitDictComprehensionExpr(DictComprehensionExpr expr) {
     Map<dynamic, dynamic> result = {};
     _evaluateComprehension(expr.clauses, (env) {
-      dynamic key = expr.key.accept(this);
-      dynamic value = expr.value.accept(this);
+      dynamic key = withEnvironment(env, () => expr.key.accept(this));
+      dynamic value = withEnvironment(env, () => expr.value.accept(this));
       result[key] = value;
+    });
+    return result;
+  }
+
+  @override
+  Object? visitSetComprehensionExpr(SetComprehensionExpr expr) {
+    Set<dynamic> result = {};
+    _evaluateComprehension(expr.clauses, (env) {
+      result.add(withEnvironment(env, () => expr.element.accept(this)));
     });
     return result;
   }
@@ -2906,6 +2915,95 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           index = prevForIndex;
         }
       }
+    }
+  }
+  
+  /// Builds a list, string or tuple slice
+  @override
+  Object? visitSliceExpr(SliceExpr expr) {
+      // Evaluate the list
+    Object? listObj = expr.list.accept(this);
+    List list;
+    if (listObj is PyList) {
+      list = listObj.list;
+    } else if (listObj is PyTuple) {
+      list = listObj.tuple;
+    } else if (listObj is String) {
+      list = listObj.split("");
+    } else {
+      throw RuntimeError(expr.bracket, "${getTypeString(listObj)} is not subscriptable.");
+    }
+
+    // Evaluate start, stop, and step (with default values)
+    int start = 0;
+    int? stop;
+    int step = 1;
+
+    if (expr.start != null) {
+      Object? startObj = expr.start!.accept(this);
+      if (startObj is! int) {
+        throw RuntimeError(expr.bracket, "Slice start must be an integer.");
+      }
+      start = startObj;
+    }
+
+    if (expr.stop != null) {
+      Object? stopObj = expr.stop!.accept(this);
+      if (stopObj is! int) {
+        throw RuntimeError(expr.bracket, "Slice stop must be an integer.");
+      }
+      stop = stopObj;
+    } else {
+      stop = list.length;
+    }
+
+    if (expr.step != null) {
+      Object? stepObj = expr.step!.accept(this);
+      if (stepObj is! int) {
+        throw RuntimeError(expr.bracket, "Slice step must be an integer.");
+      }
+      step = stepObj;
+    }
+
+    // Handle negative indices
+    if (start < 0) {
+      start = list.length + start;
+    }
+    if (stop < 0) {
+      stop = list.length + stop;
+    }
+
+    // Clamp start and stop to valid range
+    start = start.clamp(0, list.length);
+    stop = stop.clamp(0, list.length);
+
+    if (step<0 && expr.start==null) {
+      start = list.length-1;
+    }
+    if (step<0 && expr.stop==null) {
+      stop = -1;
+    }
+
+    // Create the sliced list
+    List<dynamic> slicedList = [];
+    if (step > 0) {
+      for (int i = start; i < stop; i += step) {
+        slicedList.add(list[i]);
+      }
+    } else if (step < 0) {
+      for (int i = start; i > stop; i += step) {
+        slicedList.add(list[i]);
+      }
+    }
+
+    if (listObj is PyList) {
+      return PyList(slicedList);
+    } else if (listObj is PyTuple) {
+      return PyTuple(slicedList);
+    } else if (listObj is String) {
+      return slicedList.join("");
+    } else { // should not happen
+      throw RuntimeError(expr.bracket, "${getTypeString(listObj)} is not subscriptable.");
     }
   }
 

@@ -769,8 +769,8 @@ class Parser {
     // Allow chaining: func()(...) or list[i](...)
       if (match([TokenType.LEFT_PAREN])) {
         expr = finishCall(expr); // expr becomes the CallExpr node
-      } else if (match([TokenType.LEFT_BRACKET])) {
-        expr = finishIndex(expr); // expr becomes the GetExpr node
+      } else if (match([TokenType.LEFT_BRACKET])) { // index or slice
+        expr = finishIndexOrSlice(expr); // expr becomes the GetExpr node
       }  else if (match([TokenType.DOT])) {
         Token name = consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
         expr = AttributeGetExpr(expr, name);
@@ -935,11 +935,42 @@ class Parser {
 
   /// Finishes parsing an indexing operation after the opening bracket '[' has been matched.
   /// index ::= "[" expression "]" ;
-  Expr finishIndex(Expr object) {
+  Expr finishIndexOrSlice(Expr object) {
     Token bracket = previous(); // The '[' token
+    if (check(TokenType.COLON)) { // [:end] or [:] slice
+      Expr slice = parseSlice(object, bracket, null);
+      return slice;
+    }
     Expr index = expression();
+    if (check(TokenType.COLON)) { // [start:end]or [start:end:step] or [start:] slice
+      Expr slice = parseSlice(object, bracket, index);
+      return slice;
+    }
+    // single index
     consume(TokenType.RIGHT_BRACKET, "Expect ']' after index.");
     return IndexGetExpr(object, bracket, index);
+  }
+
+  /// Finishes parsing of a slice expression ([start:end], [start:end:step], [:end], [start:] or [:] )
+  /// The [start] expression has been parsed already by the calling function,
+  /// and the current token should be the colon.
+  Expr parseSlice(Expr listExpr, Token bracket, Expr? start) {
+    Expr? stop;
+    Expr? step;
+      // Parse first colon
+    consume(TokenType.COLON, "Expect ':' in slice.");
+    // Parse stop (optional)
+    if (!check(TokenType.COLON) && !check(TokenType.RIGHT_BRACKET)) {
+      stop = expression();
+    }
+    // Parse step (optional)
+    if (match([TokenType.COLON])) {
+      if (!check(TokenType.RIGHT_BRACKET)) {
+        step = expression();
+      }
+    }
+    consume(TokenType.RIGHT_BRACKET, "Expect ']' after slice.");
+    return SliceExpr(listExpr, start, stop, step, bracket);
   }
 
   /// Parses the highest-precedence expressions: literals, variables, parenthesized expressions,
@@ -1018,7 +1049,7 @@ class Parser {
       Expr expr = expression();
       if (peek().type == TokenType.FOR) {
         // It's a list comprehension
-        current = start; //restoreState();  
+        current = start; //restoreState();
         return listComprehension();
       } else {
         // List literal [ ... ]
@@ -1036,50 +1067,58 @@ class Parser {
     }
 
     if (match([TokenType.LEFT_BRACE])) {
+      int start = current - 1; // store current token position to be able to restart from here
       Token brace = previous();
       List<Expr> keys = [];  // Temp list for potential keys OR set elements
       List<Expr> values = []; // Temp list for potential values
-      if (!check(TokenType.RIGHT_BRACE)) {
+      bool isDict = false, isComprehension = false;
+
+      if (check(TokenType.RIGHT_BRACE)) {
+        consume(TokenType.RIGHT_BRACE, '');
+        return DictLiteralExpr(brace, [], []);
+      }
+
+      keys.add(expression());
+      if (match([TokenType.COLON])) {
+        isDict = true;
+        values.add(expression());
+      }
+      if (peek().type == TokenType.FOR) {
+        isComprehension = true;
+      }
+
+      if (isComprehension) {
+        current = start; // reset parser to opening left brace
+        return isDict? dictComprehension() : setComprehension();
+      } else {
         do {
           if (check(TokenType.RIGHT_BRACE)) break;
+          consume(TokenType.COMMA,'invalid syntax. Perhaps you forgot a comma?');
           Expr keyOrElement  = expression();
-          if (match([TokenType.COLON])) {
-            // It's a dictionary entry
-            if (values.length != keys.length) {
+          if (isDict) {
+            if (match([TokenType.COLON])) {
+              Expr value = expression();
+              keys.add(keyOrElement);
+              values.add(value);
+            } else {
               // This means we previously parsed a set element, now mixing with dict entry
-              throw error(previous(), "Cannot mix set elements and dict key-value pairs in the same literal.");
+              throw error(previous(), "':' expected after dictionary key");
             }
-            Expr value = expression();
-            keys.add(keyOrElement);
-            values.add(value);
-          } else {
-            // It's potentially a set element
-            if (values.isNotEmpty) {
-              // This means we previously parsed dict entries, now mixing with set element
-              throw error(peek(), "Cannot mix set elements and dict key-value pairs in the same literal.");
-              // Note: Check based on peek(), as no COLON was matched
-            }
+          } else { // store set element
             keys.add(keyOrElement); // Store as potential set element
           }
-        } while (match([TokenType.COMMA]));
+        } while (true);
       }
       consume(TokenType.RIGHT_BRACE, "Expect '}' after set elements or dictionary entries.");
-      if (values.isNotEmpty) {
-        // If we collected values, it was a dictionary
+      if (isDict) {
         if (keys.length != values.length) {
             // Should not happen due to checks above, but safety first
             throw error(brace, "Internal parser error: Mismatched keys/values in dictionary literal.");
         }
         return DictLiteralExpr(brace, keys, values);
       } else {
-        // If no values were collected, it was a set (or empty dict {})
-        if (keys.isEmpty) {
-          // It's an empty dict {}
-          return DictLiteralExpr(brace, [], []);
-        } else {
           // It's a set literal
           return SetLiteralExpr(brace, keys); // keys list now contains set elements
-        }
       }
     }
 
@@ -1180,6 +1219,20 @@ class Parser {
     }
     consume(TokenType.RIGHT_BRACE, "Expect '}' at end of dict comprehension.");
     return DictComprehensionExpr(key, value, clauses);
+  }
+
+  Expr setComprehension() {
+    consume(TokenType.LEFT_BRACE, "Expect '{' at start of set comprehension.");
+    Expr element = expression();
+    // Parse the comprehensions
+    List<ComprehensionClause> clauses = [];
+    while (true) {
+      List<ComprehensionClause> newClauses = comprehension();
+      if (newClauses.isEmpty) break;
+      clauses.addAll(newClauses);
+    }
+    consume(TokenType.RIGHT_BRACE, "Expect '}' at end of set comprehension.");
+    return SetComprehensionExpr(element, clauses);
   }
 
   // --- Helper Methods ---

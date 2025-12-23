@@ -148,6 +148,88 @@ def add(a, b=1):
      });
   });
 
+  group('Comprehensions', () {
+    test('should parse simple list comprehension', () {
+        final source = '[i for i in range(5)]';
+        final expectedAstString = '(expr_stmt (list_comp (elt: i,  generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse list comprehension with for-if-if-for-if', () {
+        final source = '[i for i in range(5) if i>0 if i%2==0 for j in range(5) if j<0]';
+        final expectedAstString = '(expr_stmt (list_comp (elt: i,  generators: [comprehension(target=i, iter=(call range 5), ifs=[(> i 0), (== (% i 2) 0), ], ), comprehension(target=j, iter=(call range 5), ifs=[(< j 0), ])])))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse simple set comprehension', () {
+        final source = '{i for i in range(5)}';
+        final expectedAstString = '(expr_stmt (set_comp (elt: i, generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    
+    test('should parse simple dict comprehension', () {
+        final source = '{i: i*i for i in range(5)}';
+        final expectedAstString = '(expr_stmt (dict_comp (key: i, value: (* i i), generators: [comprehension(target=i, iter=(call range 5), ifs=[])])))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+  });
+
+  group('Slices', () {
+    test('should parse x[a:b] slice', () {
+        final source = 'x[1:2]';
+        final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[:] slice', () {
+        final source = 'x[:]';
+        final expectedAstString = '(expr_stmt (slice(x)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[::] slice', () {
+        final source = 'x[::]';
+        final expectedAstString = '(expr_stmt (slice(x)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[a:b:c] slice', () {
+        final source = 'x[1:2:3]';
+        final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2 step=3)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[a::c] slice', () {
+        final source = 'x[1::3]';
+        final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[a:b:] slice', () {
+        final source = 'x[1::3]';
+        final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[:b:c] slice', () {
+        final source = 'x[:2:3]';
+        final expectedAstString = '(expr_stmt (slice(x upper=2 step=3)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[a:] slice', () {
+        final source = 'x[1:]';
+        final expectedAstString = '(expr_stmt (slice(x lower=1)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[a::] slice', () {
+        final source = 'x[1::]';
+        final expectedAstString = '(expr_stmt (slice(x lower=1)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[:b:] slice', () {
+        final source = 'x[:2:]';
+        final expectedAstString = '(expr_stmt (slice(x upper=2)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+    test('should parse x[::c] slice', () {
+        final source = 'x[::3]';
+        final expectedAstString = '(expr_stmt (slice(x step=3)))';
+        expect(parseAndPrint(source), equals(expectedAstString));
+      });
+  });
+
   group('Detect unexpected token errors', () {
 
     test('unexpected token after expression', () {

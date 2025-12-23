@@ -1363,4 +1363,111 @@ print(x)
       });
     }
   });
+
+  group('dict comprehensions', () {
+
+    var tests = [
+      ["{x: x**2 for x in range(5)}", "{0: 0, 1: 1, 2: 4, 3: 9, 4: 16}"],
+      ["{x: x**2 for x in range(5) if x % 2 == 0}", "{0: 0, 2: 4, 4: 16}"],
+      ["{(x, y): x + y for x in range(2) for y in range(2)}", "{(0, 0): 0, (0, 1): 1, (1, 0): 1, (1, 1): 2}"],
+      ["{x: x for x in []}", "{}"],
+      ["{x: x**2 for x in range(10) if x % 2 == 0 if x > 2}", "{4: 16, 6: 36, 8: 64}"],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode("print(${t[0]})");
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+  });
+
+  group('set comprehensions', () {
+
+    var tests = [
+      ["{x for x in range(5)}", "{0, 1, 2, 3, 4}"],
+      ["{x for x in range(5) if x % 2 == 0}", "{0, 2, 4}"],
+      ["{x * y for x in range(3) for y in range(4)}", "{0, 1, 2, 3, 4, 6}"],
+      ["{x for x in []}", "set()"],
+      ["{x for x in range(10) if x % 2 == 0 if x > 2}", "{4, 6, 8}"],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode("print(${t[0]})");
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+
+    test("mixed comprehension error", () {
+      final result = runCode("compr = {x: x for x in range(5), x for x in range(3)}");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Expect \'}\'')));
+    });
+
+    test("incomplete condition", () {
+      final result = runCode("compr = {x for x in range(5) if}");
+      expect(result.error, isA<ParseError>().having((e) => e.message, 'message', contains('Expect expression')));
+    });
+  });
+
+  group('list slices (only lookup)', () {
+
+    var tests = [
+      ["x[:]", "[0, 1, 2, 3, 4]"],
+      ["x[1:4]", "[1, 2, 3]"],
+      ["x[::2]", "[0, 2, 4]"],
+      ["x[-3:-1]", "[2, 3]"],
+      ["x[::-1]", "[4, 3, 2, 1, 0]"],
+      ["x[4:1:-1]", "[4, 3, 2]"],
+      ["x[2:2]", "[]"],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode("x=[0,1,2,3,4]\nprint(${t[0]})");
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+  });
+
+  group('tuple slices (only lookup)', () {
+
+    var tests = [
+      ["x[:]", "(0, 1, 2, 3, 4)"],
+      ["x[1:4]", "(1, 2, 3)"],
+      ["x[::2]", "(0, 2, 4)"],
+      ["x[-3:-1]", "(2, 3)"],
+      ["x[::-1]", "(4, 3, 2, 1, 0)"],
+      ["x[4:1:-1]", "(4, 3, 2)"],
+      ["x[2:2]", "()"],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode("x=(0,1,2,3,4)\nprint(${t[0]})");
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+  });
+
+  group('string slices', () {
+
+    var tests = [
+      ["x[:]", "hello"],
+      ["x[1:4]", "ell"],
+      ["x[::2]", "hlo"],
+      ["x[-3:-1]", "ll"],
+      ["x[::-1]", "olleh"],
+      ["x[4:1:-1]", "oll"],
+      ["x[2:2]", ""],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode("x='hello'\nprint(${t[0]})");
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+  });
+
 }

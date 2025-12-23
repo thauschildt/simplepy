@@ -16,6 +16,8 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - functions (default arguments, *args, **kwargs are partially implemented), `lambda` functions
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
   `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `sum()`
+  - list, dict and set comprehensions
+  - list, string and tuple slices - read only
   - classes (no class attributes, no multiple inheritance)
   - `global` and `nonlocal` variables
 
@@ -29,8 +31,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - `str.startswith()`, `str.endswith()`: 1st argument can only be a single string for comparison, no tuple with alternatives
   - set operators `| & - ^ <= >=`
   - `import`
-  - list comprehensions
-  - list or string slices
+  - no slice assignments (like `x[5:10] = [1,2,3])`)
   - file I/O
   - exceptions
   - decorators
