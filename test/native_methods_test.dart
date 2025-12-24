@@ -1201,6 +1201,62 @@ b10= "".startswith("") # True
       );
     });
 
+    test('str.startswith() with tuples', () {
+      runSimplePyTest(
+        '''
+s = "abcdef"
+
+# Tuple als erstes Argument
+b1 = s.startswith(("ab", "bc"))
+b2 = s.startswith(("bc", "cd"))
+b3 = s.startswith(("ab", "abc"))
+b4 = s.startswith(("xyz", "123"))
+b5 = s.startswith(("a", "b"))
+
+# Tuple mit leeren Strings
+b6 = s.startswith(("", "ab"))
+b7 = "".startswith(("", "a"))
+
+# Tuple mit Start/End-Parametern
+b8 = s.startswith(("bc", "cd"), 1)
+b9 = s.startswith(("cd", "de"), 2)
+b10 = s.startswith(("de", "ef"), 3)
+b11 = s.startswith(("ef", "fg"), 4)
+b12 = s.startswith(("ef", "fg"), 5)
+''',
+        expectedVariables: {
+          'b1': true,
+          'b2': false,
+          'b3': true,
+          'b4': false,
+          'b5': true,
+          'b6': true,
+          'b7': true,
+          'b8': true,
+          'b9': true,
+          'b10': true,
+          'b11': true,
+          'b12': false,
+        },
+      );
+      runSimplePyTest(
+        'b1 = "abcdef".startswith(("ab", 123))',
+        expectError: true,
+        errorContains:
+            'TypeError: startswith first arg must be str or a tuple of str, not int',
+      );
+
+      runSimplePyTest(
+        '''
+s = "abcdef"
+b1 = s.startswith(())  # False (empty tuple -> no match)
+b2 = s.startswith(("a",))  # True (Tuple with single string)
+b3 = s.startswith(("x",))  # False
+    ''',
+        expectedVariables: {'b1': false, 'b2': true, 'b3': false},
+      );
+    });
+
     test('str.endswith()', () {
       runSimplePyTest(
         '''

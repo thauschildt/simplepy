@@ -21,17 +21,15 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - classes (no class attributes, no multiple inheritance)
   - `global` and `nonlocal` variables
 
-
   Some more features might be added soon, but this will never become a full python interpreter.
 
 - Missing python features:
   - `int` limited to dart int: &plusmn;1<<63 native ; &plusmn;1<<53 in web
   - `list.sort()` not yet implemented
   - `dict.key()`, `dict.values()`, `dict.items()` return list copies, not dynamic views as in Python
-  - `str.startswith()`, `str.endswith()`: 1st argument can only be a single string for comparison, no tuple with alternatives
-  - set operators `| & - ^ <= >=`
+  - set operators `| & - ^ <= >=` (but available as set1.union(set2)` etc.)
   - `import`
-  - no slice assignments (like `x[5:10] = [1,2,3])`)
+  - slice assignments (like `x[5:10] = [1,2,3])`)
   - file I/O
   - exceptions
   - decorators

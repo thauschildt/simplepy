@@ -955,15 +955,29 @@ Object? strStartsWith(
   );
   checkNoKeywords('startswith', keywordArgs);
   String str = receiver as String;
-  Object? prefixObj = positionalArgs[0];
-  // TODO: Python allows a tuple of prefixes. Simplify to single string for now.
-  if (prefixObj is! String) {
+  Object? prefixObj =
+      positionalArgs[0]; // single prefix string or tuple of strings
+
+  List<String> prefixes;
+  if (prefixObj is String) {
+    prefixes = [prefixObj];
+  } else if (prefixObj is PyTuple) {
+    prefixes = [];
+    for (var item in prefixObj.tuple) {
+      if (item is! String) {
+        throw RuntimeError(
+          Interpreter.builtInToken('startswith'),
+          "TypeError: startswith first arg must be str or a tuple of str, not ${Interpreter.getTypeString(item)}",
+        );
+      }
+      prefixes.add(item);
+    }
+  } else {
     throw RuntimeError(
       Interpreter.builtInToken('startswith'),
       "TypeError: startswith first arg must be str or a tuple of str, not ${Interpreter.getTypeString(prefixObj)}",
     );
   }
-  String prefix = prefixObj;
 
   int start = 0;
   int end = str.length;
@@ -988,13 +1002,13 @@ Object? strStartsWith(
   if (end < 0) end = 0;
   if (end > str.length) end = str.length;
 
-  if (start > end || start + prefix.length > end) {
-    // Prefix cannot possibly fit in the slice
-    return false;
+  for (String prefix in prefixes) {
+    if (start + prefix.length <= end && str.startsWith(prefix, start)) {
+      return true;
+    }
   }
 
-  // Use Dart's startsWith with the calculated start index
-  return str.startsWith(prefix, start);
+  return false;
 }
 
 /// Implementation for `str.endswith(suffix[, start[, end]])`
@@ -1014,14 +1028,27 @@ Object? strEndsWith(
   checkNoKeywords('endswith', keywordArgs);
   String str = receiver as String;
   Object? suffixObj = positionalArgs[0];
-  // TODO: Python allows a tuple of suffixes. Simplify to single string for now.
-  if (suffixObj is! String) {
+
+  List<String> suffixes;
+  if (suffixObj is String) {
+    suffixes = [suffixObj];
+  } else if (suffixObj is PyTuple) {
+    suffixes = [];
+    for (var item in suffixObj.tuple) {
+      if (item is! String) {
+        throw RuntimeError(
+          Interpreter.builtInToken('endswith'),
+          "TypeError: endswith first arg must be str or a tuple of str, not ${Interpreter.getTypeString(item)}",
+        );
+      }
+      suffixes.add(item);
+    }
+  } else {
     throw RuntimeError(
       Interpreter.builtInToken('endswith'),
       "TypeError: endswith first arg must be str or a tuple of str, not ${Interpreter.getTypeString(suffixObj)}",
     );
   }
-  String suffix = suffixObj;
 
   int start = 0;
   int end = str.length;
@@ -1050,10 +1077,12 @@ Object? strEndsWith(
   if (start > end) return false; // Empty slice
   String relevantSubstring = str.substring(start, end);
 
-  // Suffix longer than relevant part? Cannot end with it.
-  if (suffix.length > relevantSubstring.length) return false;
-
-  return relevantSubstring.endsWith(suffix);
+  for (String suffix in suffixes) {
+    if (start + suffix.length <= end && relevantSubstring.endsWith(suffix)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Implementation for `str.strip([chars])`

@@ -1,5 +1,6 @@
 ## 1.3.1 - Unreleased
 - fixed tuple indexing
+- extended str.startswith() and str.endswith() to accept a tuple of strings as first argument
 
 ## 1.3.0 
 - added `global`and `nonlocal`statements
