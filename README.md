@@ -25,7 +25,6 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
 
 - Missing python features:
   - `int` limited to dart int: &plusmn;1<<63 native ; &plusmn;1<<53 in web
-  - `list.sort()` not yet implemented
   - `dict.key()`, `dict.values()`, `dict.items()` return list copies, not dynamic views as in Python
   - set operators `| & - ^ <= >=` (but available as set1.union(set2)` etc.)
   - `import`

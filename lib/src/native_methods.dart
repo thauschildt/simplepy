@@ -85,6 +85,7 @@ final Map<String, PyCallableNativeImpl> listMethodImpls = {
   'count': listCount,
   'index': listIndex,
   'reverse': listReverse,
+  'sort': listSort,
 };
 
 final Map<String, PyCallableNativeImpl> dictMethodImpls = {
@@ -371,6 +372,67 @@ Object? listReverse(
     j--;
   }
   return null; // reverse returns None
+}
+
+/// Sorts the list in place.
+/// Optional arguments:
+/// - `key`: A function of one argument that extracts a comparison key.
+/// - `reverse`: If true, sorts in descending order.
+Object? listSort(
+  Interpreter interpreter,
+  Object receiver,
+  List<Object?> positionalArgs,
+  Map<String, Object?> keywordArgs,
+) {
+  if (receiver is! PyList) {
+    throw RuntimeError(
+      Interpreter.builtInToken('sort'),
+      "TypeError: 'sort' requires a list, not ${Interpreter.getTypeString(receiver)}",
+    );
+  }
+  List<dynamic> list = receiver.list;
+
+  // Parse optional arguments (key, reverse)
+  Object? keyFunc;
+  bool reverse = false;
+
+  // Positional args (only key possible, reverse only by keyword)
+  if (positionalArgs.isNotEmpty) {
+    throw RuntimeError(
+      Interpreter.builtInToken('sort'),
+      "TypeError: sort() takes at most 1 positional argument but ${positionalArgs.length} were given",
+    );
+  }
+
+  // Keyword args (key, reverse)
+  if (keywordArgs.containsKey('key')) {
+    keyFunc = keywordArgs['key'];
+  }
+  if (keywordArgs.containsKey('reverse')) {
+    reverse = keywordArgs['reverse'] as bool;
+  }
+
+  // Validate arguments
+  if (keyFunc != null && keyFunc is! PyFunction) {
+    throw RuntimeError(
+      Interpreter.builtInToken('sort'),
+      "TypeError: 'key' must be a function or None",
+    );
+  }
+
+  // sort
+  if (keyFunc == null) {
+    // dfault sorting without key function
+    list.sort((a, b) => reverse ? b.compareTo(a) : a.compareTo(b));
+  } else {
+    // sort using key function
+    list.sort((a, b) {
+      dynamic keyA = (keyFunc as PyFunction).call(interpreter, [a], {});
+      dynamic keyB = keyFunc.call(interpreter, [b], {});
+      return reverse ? keyB.compareTo(keyA) : keyA.compareTo(keyB);
+    });
+  }
+  return null; // sort() returns None in python
 }
 
 // --- Dictionary Methods ---

@@ -266,6 +266,47 @@ i4 = l.index('d', -2)   # Search using negative start
       );
       runSimplePyTest('l = []\nl.reverse()\nprint(l)', expectedOutput: "[]\n");
     });
+
+    test('list.sort()', () {
+      runSimplePyTest(
+        '''
+lst1 = [3, 1, 2]
+lst1.sort()
+b1 = lst1 == [1, 2, 3]
+
+lst2 = [3, 1, 2]
+lst2.sort(reverse=True)
+b2 = lst2 == [3, 2, 1]
+
+lst3 = ["apple", "Banana", "cherry"]
+lst3.sort(key=lambda x: x.lower())
+b3 = lst3 == ["apple", "Banana", "cherry"]
+
+lst4 = ["apple", "Banana", "cherry"]
+lst4.sort(key=lambda x: x.lower(), reverse=True)
+b4 = lst4 == ["cherry", "Banana", "apple"]
+
+lst5 = []
+lst5.sort()
+b5 = lst5 == []
+''',
+        expectedVariables: {
+          'b1': true,
+          'b2': true,
+          'b3': true,
+          'b4': true,
+          'b5': true,
+        },
+      );
+    });
+
+    test('list.sort()', () {
+      runSimplePyTest(
+        "[1,'a'].sort()",
+        expectError: true,
+        errorContains: "'String' is not a subtype of type 'num'",
+      );
+    });
   }); // End List Methods group
 
   group('Tuple Methods', () {

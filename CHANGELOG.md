@@ -1,6 +1,7 @@
 ## 1.3.1 - Unreleased
 - fixed tuple indexing
-- extended str.startswith() and str.endswith() to accept a tuple of strings as first argument
+- extended `str.startswith()` and `str.endswith()` to accept a tuple of strings as first argument
+- added `list.sort()`
 
 ## 1.3.0 
 - added `global`and `nonlocal`statements
@@ -17,7 +18,7 @@
 ## 1.2.0
 - first public version
 
-## Internal hersions before publishing
+## Internal versions before publishing
 
 ### 1.1.5
 - added f-strings: `[[fill]align][sign][0][width][.precision][dfs]`
