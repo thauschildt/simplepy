@@ -1984,6 +1984,36 @@ print(x)
     });
   });
 
+  group('list, tuple, string and dict indexing)', () {
+    var tests = [
+      ["x=[1,2,3]\nprint(x[1])", "2"],
+      ["x=(4,5,6)\nprint(x[1])", "5"],
+      ["x={'a':9,'b':[1,2],'c':'x'}\nprint(x['b'])", "[1, 2]"],
+      ["x=[1,['x','y'],3]\nprint(x[1][1])", "y"],
+      ["x=(4,5,(6,7))\nprint(x[2][1])", "7"],
+      ["x={'a':9,'b':[1,2],'c':'x'}\nprint(x['b'][1])", "2"],
+    ];
+
+    for (var t in tests) {
+      test(t[0], () {
+        final result = runCode(t[0]);
+        expect(result.output, equals("${t[1]}\n"));
+      });
+    }
+
+    test("Should not assign to tuple item", () {
+      final result = runCode("t=(1,2,3)\nt[1]=0");
+      expect(
+        result.error,
+        isA<RuntimeError>().having(
+          (e) => e.message,
+          'message',
+          contains('does not support item assignment'),
+        ),
+      );
+    });
+  });
+
   group('list slices (only lookup)', () {
     var tests = [
       ["x[:]", "[0, 1, 2, 3, 4]"],

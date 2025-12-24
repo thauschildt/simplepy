@@ -1,3 +1,6 @@
+## 1.3.1 - Unreleased
+- fixed tuple indexing
+
 ## 1.3.0 
 - added `global`and `nonlocal`statements
 - added single-line if/elif/else, for, while and def (e.g. `def f(x): return 42` without newline)
