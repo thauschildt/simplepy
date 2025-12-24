@@ -700,8 +700,9 @@ Object? strCount(
     count++;
     // Move position past the found substring
     currentPos = foundIndex + (sub.isEmpty ? 1 : sub.length);
-    if (sub.isEmpty && currentPos > end)
+    if (sub.isEmpty && currentPos > end) {
       break; // Avoid infinite loop for empty sub at end
+    }
   }
   return count;
 }
@@ -1209,14 +1210,18 @@ Object? _tupleIndex(
   int stop = tuple.length;
   // ... (parse start/stop, handle slice indices, loop and check with isEqual) ...
   try {
-    if (positionalArgs.length > 1 && positionalArgs[1] is! int)
+    if (positionalArgs.length > 1 && positionalArgs[1] is! int) {
       throw "TypeError: slice indices must be integers";
-    if (positionalArgs.length > 2 && positionalArgs[2] is! int)
+    }
+    if (positionalArgs.length > 2 && positionalArgs[2] is! int) {
       throw "TypeError: slice indices must be integers";
-    if (positionalArgs.length > 1)
+    }
+    if (positionalArgs.length > 1) {
       start = expectInt(positionalArgs[1], 'index() start');
-    if (positionalArgs.length > 2)
+    }
+    if (positionalArgs.length > 2) {
       stop = expectInt(positionalArgs[2], 'index() stop');
+    }
   } catch (e) {
     /* ... TypeError ... */
     throw RuntimeError(Interpreter.builtInToken('index'), "TypeError: $e");
