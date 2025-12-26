@@ -471,6 +471,8 @@ abstract class Stmt {
   /// Accepts a [StmtVisitor] and calls the appropriate visit method based on
   /// the concrete type of this statement node.
   /// Returns the result produced by the visitor's method (often `void`).
+  final Token startToken;
+  Stmt(this.startToken);
   R accept<R>(StmtVisitor<R> visitor);
 }
 
@@ -516,6 +518,12 @@ abstract class StmtVisitor<R> {
 
   /// Visits a [ContinueStmt] node (`continue` statement).
   R visitContinueStmt(ContinueStmt stmt);
+
+  /// Visits a [TryStmt] node (`try:`).
+  R visitTryStmt(TryStmt stmt);
+
+  /// Visits a [RaiseStmt] node (e.g. `raise Exception()`).
+  R visitRaiseStmt(RaiseStmt stmt);
 }
 
 /// Represents a block (sequence) of statements.
@@ -523,7 +531,7 @@ abstract class StmtVisitor<R> {
 class BlockStmt extends Stmt {
   /// The list of statements contained within this block.
   final List<Stmt> statements;
-  BlockStmt(this.statements);
+  BlockStmt(this.statements, Token startToken) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitBlockStmt(this);
 }
@@ -533,7 +541,8 @@ class ClassStmt extends Stmt {
   final Token name;
   final VariableExpr? superclass; // Optional superclass variable expression
   final List<FunctionStmt> methods; // Class body contains method definitions
-  ClassStmt(this.name, this.superclass, this.methods);
+  ClassStmt(this.name, this.superclass, this.methods, Token startToken)
+    : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitClassStmt(this);
 }
@@ -543,7 +552,7 @@ class ClassStmt extends Stmt {
 class ExpressionStmt extends Stmt {
   /// The expression being executed as a statement.
   final Expr expression;
-  ExpressionStmt(this.expression);
+  ExpressionStmt(this.expression, Token startToken) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitExpressionStmt(this);
 }
@@ -590,21 +599,22 @@ class FunctionStmt extends Stmt {
 
   /// The list of statements forming the function's body.
   final List<Stmt> body;
-  FunctionStmt(this.name, this.params, this.body);
+  FunctionStmt(this.name, this.params, this.body, Token startToken)
+    : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitFunctionStmt(this);
 }
 
-class GlobalStmt implements Stmt {
+class GlobalStmt extends Stmt {
   final List<Token> names; // Liste der Variablennamen
-  GlobalStmt(this.names);
+  GlobalStmt(this.names, Token startToken) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitGlobalStmt(this);
 }
 
-class NonlocalStmt implements Stmt {
+class NonlocalStmt extends Stmt {
   final List<Token> names; // Liste der Variablennamen
-  NonlocalStmt(this.names);
+  NonlocalStmt(this.names, Token startToken) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitNonlocalStmt(this);
 }
@@ -612,8 +622,7 @@ class NonlocalStmt implements Stmt {
 /// Represents a `pass` statement, which performs no operation.
 class PassStmt extends Stmt {
   /// The `pass` keyword token. Used for location information.
-  final Token token;
-  PassStmt(this.token);
+  PassStmt(super.startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitPassStmt(this);
 }
@@ -632,7 +641,13 @@ class IfStmt extends Stmt {
   /// The optional statement (typically a [BlockStmt]) executed if all preceding
   /// `if` and `elif` conditions are false. Can be null.
   final Stmt? elseBranch;
-  IfStmt(this.condition, this.thenBranch, this.elifBranches, this.elseBranch);
+  IfStmt(
+    this.condition,
+    this.thenBranch,
+    this.elifBranches,
+    this.elseBranch,
+    Token startToken,
+  ) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitIfStmt(this);
 }
@@ -655,7 +670,7 @@ class ReturnStmt extends Stmt {
 
   /// The optional expression whose value is returned. Can be null for `return` without a value.
   final Expr? value;
-  ReturnStmt(this.keyword, this.value);
+  ReturnStmt(this.keyword, this.value, Token startToken) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitReturnStmt(this);
 }
@@ -667,7 +682,7 @@ class WhileStmt extends Stmt {
 
   /// The statement (typically a [BlockStmt]) executed as the loop body.
   final Stmt body;
-  WhileStmt(this.condition, this.body);
+  WhileStmt(this.condition, this.body, Token startToken) : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) {
     /*print("visit WhileStmt");*/
@@ -685,7 +700,8 @@ class ForStmt extends Stmt {
 
   /// The statement (typically a [BlockStmt]) executed as the loop body for each item.
   final Stmt body;
-  ForStmt(this.variable, this.iterable, this.body);
+  ForStmt(this.variable, this.iterable, this.body, Token startToken)
+    : super(startToken);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitForStmt(this);
 }
@@ -694,7 +710,7 @@ class ForStmt extends Stmt {
 class BreakStmt extends Stmt {
   /// The `break` keyword token. Used for location information.
   final Token token;
-  BreakStmt(this.token);
+  BreakStmt(this.token) : super(token);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitBreakStmt(this);
 }
@@ -703,9 +719,52 @@ class BreakStmt extends Stmt {
 class ContinueStmt extends Stmt {
   /// The `continue` keyword token. Used for location information.
   final Token token;
-  ContinueStmt(this.token);
+  ContinueStmt(this.token) : super(token);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitContinueStmt(this);
+}
+
+// TryStmt: Represents a try-except-else-finally block
+class TryStmt extends Stmt {
+  final Stmt tryBlock;
+  final List<ExceptClause> exceptClauses;
+  final Stmt? elseBlock;
+  final Stmt? finallyBlock;
+
+  TryStmt(
+    this.tryBlock,
+    this.exceptClauses,
+    this.elseBlock,
+    this.finallyBlock,
+    Token startToken,
+  ) : super(startToken);
+
+  @override
+  R accept<R>(StmtVisitor<R> visitor) {
+    return visitor.visitTryStmt(this);
+  }
+}
+
+// ExceptClause: Represents an except-clause
+class ExceptClause {
+  final Token? exceptionType; // Optional: Exception type (e.g. `ValueError`)
+  final Token?
+  exceptionName; // Optional: Name of Exception variable (e.g. `as e`)
+  final Stmt block; // block to be executed when match is found
+
+  ExceptClause(this.exceptionType, this.exceptionName, this.block);
+}
+
+// RaiseStmt: Represents a raise statement
+class RaiseStmt extends Stmt {
+  final Expr? exception; // Optional: Exception to be thrown (re-raise if null)
+
+  RaiseStmt(this.exception, Token startToken) : super(startToken);
+
+  @override
+  R accept<R>(StmtVisitor<R> visitor) {
+    return visitor.visitRaiseStmt(this);
+  }
 }
 
 /// Utility class implementing the [ExprVisitor] and [StmtVisitor] interfaces
@@ -1029,5 +1088,17 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     if (expr.stop != null) param.add("upper=${printExpr(expr.stop!)}");
     if (expr.step != null) param.add("step=${printExpr(expr.step!)}");
     return parenthesize("slice(${param.join(" ")})", []);
+  }
+
+  @override
+  String visitRaiseStmt(RaiseStmt stmt) {
+    // TODO: implement visitRaiseStmt
+    throw UnimplementedError();
+  }
+
+  @override
+  String visitTryStmt(TryStmt stmt) {
+    // TODO: implement visitTryStmt
+    throw UnimplementedError();
   }
 }

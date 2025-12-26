@@ -143,7 +143,7 @@ class Parser {
       }
     }
     consume(TokenType.DEDENT, "Expect dedent to close class body.");
-    return ClassStmt(name, superclass, methods);
+    return ClassStmt(name, superclass, methods, name);
   }
 
   /// Parses a function definition.
@@ -287,7 +287,7 @@ class Parser {
         throw error(peek(), "invalid syntax");
       }
     }
-    return FunctionStmt(name, parameters, body); // Pass the new list
+    return FunctionStmt(name, parameters, body, name); // Pass the new list
   }
 
   /// Parses a statement.
@@ -314,10 +314,19 @@ class Parser {
       stmt = globalStatement();
     } else if (match([TokenType.NONLOCAL])) {
       stmt = nonlocalStatement();
+    } else if (match([TokenType.TRY])) {
+      stmt = tryStatement();
+    } else if (match([TokenType.RAISE])) {
+      stmt = raiseStatement();
     } else {
       stmt = expressionStatement();
     }
-    if (![TokenType.IF, TokenType.WHILE, TokenType.FOR].contains(token.type)) {
+    if (![
+      TokenType.IF,
+      TokenType.WHILE,
+      TokenType.FOR,
+      TokenType.TRY,
+    ].contains(token.type)) {
       // Check if there is no extra token after a statement.
       // In case of if, while, for this is done in the specific parsing methods.
       _ensureEndOfStatement();
@@ -367,15 +376,16 @@ class Parser {
   ///            ( "elif" expression ":" block )*
   ///            ( "else" ":" block )? ;
   Stmt ifStatement() {
+    Token ifToken = peek();
     Expr condition = expression();
     consume(TokenType.COLON, "Expect ':' after if condition.");
     Stmt thenBranch;
     if (peek().type == TokenType.NEWLINE) {
-      thenBranch = BlockStmt(block()); // standard block
+      thenBranch = BlockStmt(block(), peekNextToken()); // standard block
     } else {
       thenBranch = BlockStmt([
         statement(),
-      ]); // single-line statement as block with one statement
+      ], peekNextToken()); // single-line statement as block with one statement
       if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
         throw error(peek(), "invalid syntax.");
       }
@@ -389,9 +399,9 @@ class Parser {
       consume(TokenType.COLON, "Expect ':' after elif condition.");
       Stmt elifThenBranch;
       if (peek().type == TokenType.NEWLINE) {
-        elifThenBranch = BlockStmt(block());
+        elifThenBranch = BlockStmt(block(), peekNextToken());
       } else {
-        elifThenBranch = BlockStmt([statement()]);
+        elifThenBranch = BlockStmt([statement()], peekNextToken());
         if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
           throw error(peek(), "invalid syntax");
         }
@@ -406,9 +416,9 @@ class Parser {
     if (match([TokenType.ELSE])) {
       consume(TokenType.COLON, "Expect ':' after else.");
       if (peek().type == TokenType.NEWLINE) {
-        elseBranch = BlockStmt(block());
+        elseBranch = BlockStmt(block(), peekNextToken());
       } else {
-        elseBranch = BlockStmt([statement()]);
+        elseBranch = BlockStmt([statement()], peekNextToken());
         if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
           throw error(peek(), "invalid syntax");
         }
@@ -416,7 +426,7 @@ class Parser {
     }
 
     // Consume trailing newline automatically handled by main parsing loop or block parsing
-    return IfStmt(condition, thenBranch, elifBranches, elseBranch);
+    return IfStmt(condition, thenBranch, elifBranches, elseBranch, ifToken);
   }
 
   /// Parses a return statement.
@@ -431,20 +441,21 @@ class Parser {
       value = expression();
     }
     // Consume trailing newline automatically handled by block/main loop
-    return ReturnStmt(keyword, value);
+    return ReturnStmt(keyword, value, keyword);
   }
 
   /// Parses a while loop statement.
   /// whileStmt ::= "while" expression ":" block ;
   Stmt whileStatement() {
+    Token keyword = previous();
     Expr condition = expression();
     consume(TokenType.COLON, "Expect ':' after while condition.");
     Stmt body;
     if (peek().type == TokenType.NEWLINE) {
-      body = BlockStmt(block()); // standard block
+      body = BlockStmt(block(), peekNextToken()); // standard block
     } else {
       // single-line body
-      body = BlockStmt([statement()]);
+      body = BlockStmt([statement()], peekNextToken());
       if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
         throw error(peek(), "invalid syntax");
       }
@@ -452,12 +463,13 @@ class Parser {
         consume(TokenType.NEWLINE, '');
       }
     }
-    return WhileStmt(condition, body);
+    return WhileStmt(condition, body, keyword);
   }
 
   /// Parses a for loop statement.
   /// forStmt ::= "for" IDENTIFIER "in" expression ":" block ;
   Stmt forStatement() {
+    Token keyword = previous();
     Token variable = consume(
       TokenType.IDENTIFIER,
       "Expect variable name after 'for'.",
@@ -467,10 +479,10 @@ class Parser {
     consume(TokenType.COLON, "Expect ':' after iterable.");
     Stmt body;
     if (peek().type == TokenType.NEWLINE) {
-      body = BlockStmt(block()); // standard block
+      body = BlockStmt(block(), peekNextToken()); // standard block
     } else {
       // single-line body
-      body = BlockStmt([statement()]);
+      body = BlockStmt([statement()], peekNextToken());
       if (peek().type != TokenType.NEWLINE && !isAtEnd()) {
         throw error(peek(), "invalid syntax");
       }
@@ -478,7 +490,7 @@ class Parser {
         consume(TokenType.NEWLINE, '');
       }
     }
-    return ForStmt(variable, iterable, body);
+    return ForStmt(variable, iterable, body, keyword);
   }
 
   /// Parses a pass statement.
@@ -502,25 +514,27 @@ class Parser {
   /// Parses a global statement.
   /// globalStmt ::= "global" IDENTIFIER ("," IDENTIFIER)* ;
   Stmt globalStatement() {
+    Token keyword = previous();
     List<Token> names = [];
     do {
       names.add(
         consume(TokenType.IDENTIFIER, "Expect variable name after 'global'."),
       );
     } while (match([TokenType.COMMA]));
-    return GlobalStmt(names);
+    return GlobalStmt(names, keyword);
   }
 
   /// Parses a nonlocal statement.
   /// nonlocalStmt ::= "nonlocal" IDENTIFIER ("," IDENTIFIER)* ;
   Stmt nonlocalStatement() {
+    Token keyword = previous();
     List<Token> names = [];
     do {
       names.add(
         consume(TokenType.IDENTIFIER, "Expect variable name after 'nonlocal'."),
       );
     } while (match([TokenType.COMMA]));
-    return NonlocalStmt(names);
+    return NonlocalStmt(names, keyword);
   }
 
   void _ensureEndOfStatement() {
@@ -537,9 +551,10 @@ class Parser {
   /// Parses an expression statement.
   /// exprStmt ::= expression ;
   Stmt expressionStatement() {
+    Token startToken = peek();
     Expr expr = expression();
     // Consume trailing newline automatically handled by block/main loop
-    return ExpressionStmt(expr);
+    return ExpressionStmt(expr, startToken);
   }
 
   /// Parses an expression (entry point, lowest precedence).
@@ -1353,6 +1368,58 @@ class Parser {
     }
     consume(TokenType.RIGHT_BRACE, "Expect '}' at end of set comprehension.");
     return SetComprehensionExpr(element, clauses);
+  }
+
+  Stmt tryStatement() {
+    Token keyword = previous();
+    consume(TokenType.COLON, "Expect ':' after 'try'.");
+    Stmt tryBlock = BlockStmt(block(), peekNextToken());
+
+    List<ExceptClause> exceptClauses = [];
+    while (match([TokenType.EXCEPT])) {
+      Token? exceptionType;
+      Token? exceptionName;
+
+      if (!check(TokenType.COLON)) {
+        exceptionType = consume(TokenType.IDENTIFIER, "Expect exception type.");
+        if (match([TokenType.AS])) {
+          exceptionName = consume(
+            TokenType.IDENTIFIER,
+            "Expect exception name.",
+          );
+        }
+      }
+      consume(TokenType.COLON, "Expect ':' after 'except'.");
+      Stmt exceptBlock = BlockStmt(block(), peekNextToken());
+      exceptClauses.add(
+        ExceptClause(exceptionType, exceptionName, exceptBlock),
+      );
+    }
+
+    Stmt? elseBlock;
+    if (match([TokenType.ELSE])) {
+      consume(TokenType.COLON, "Expect ':' after 'else'.");
+      elseBlock = BlockStmt(block(), peekNextToken());
+    }
+
+    Stmt? finallyBlock;
+    if (match([TokenType.FINALLY])) {
+      consume(TokenType.COLON, "Expect ':' after 'finally'.");
+      finallyBlock = BlockStmt(block(), peekNextToken());
+    }
+
+    return TryStmt(tryBlock, exceptClauses, elseBlock, finallyBlock, keyword);
+  }
+
+  Stmt raiseStatement() {
+    Token keyword = previous();
+    Expr? exception;
+    if (!check(TokenType.NEWLINE) &&
+        !check(TokenType.DEDENT) &&
+        !check(TokenType.EOF)) {
+      exception = expression();
+    }
+    return RaiseStmt(exception, keyword);
   }
 
   // --- Helper Methods ---

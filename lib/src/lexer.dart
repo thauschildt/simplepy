@@ -82,6 +82,11 @@ enum TokenType {
   CLASS,
   SUPER,
   LAMBDA,
+  TRY,
+  EXCEPT,
+  AS,
+  FINALLY,
+  RAISE,
   // Whitespace & Control
   INDENT,
   DEDENT,
@@ -166,6 +171,11 @@ class Lexer {
     'class': TokenType.CLASS,
     'super': TokenType.SUPER,
     'lambda': TokenType.LAMBDA,
+    'try': TokenType.TRY,
+    'except': TokenType.EXCEPT,
+    'as': TokenType.AS,
+    'finally': TokenType.FINALLY,
+    'raise': TokenType.RAISE,
   };
 
   Lexer(this.source);

@@ -198,7 +198,9 @@ class PyClass extends PyCallable {
 class PyInstance {
   final PyClass klass; // The class this instance belongs to
   final Map<String, Object?> fields = {}; // Instance attributes
-  PyInstance(this.klass);
+  PyInstance(this.klass) {
+    fields["__class__"] = klass;
+  }
 
   /// Gets an attribute or method from the instance.
   Object? get(Token name) {
@@ -225,6 +227,14 @@ class PyInstance {
 
   @override
   String toString() => "<${klass.name} object>"; // Basic representation
+}
+
+/// ExceptionInfo stores the token where an exception occurred
+/// in addition to the exception itself (which is a PyInstance)
+class ExceptionInfo {
+  final PyInstance exception;
+  final Token token; // Contains line and column information
+  ExceptionInfo(this.exception, this.token);
 }
 
 /// Represents a method that has been bound to a specific instance (`self`).
@@ -693,6 +703,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// The currently active environment during execution. Changes as scopes are entered/exited.
   late Environment _environment;
 
+  /// The exception caught last, to be used for re-raise
+  ExceptionInfo? _lastExceptionInfo;
+
   /// Callback function used for the `print` built-in. Allows redirecting output.
   void Function(String)? _print;
 
@@ -711,6 +724,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   Interpreter() {
     _environment = globals; // Start in global scope
 
+    // register base class for Exceptions
+    _registerBuiltinExceptionClasses();
     // Register all built-in functions
     _registerBuiltin("print", NativeFunction(_printBuiltin));
     _registerBuiltin("range", NativeFunction(_rangeBuiltin));
@@ -731,6 +746,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("max", NativeFunction(_maxBuiltin));
     _registerBuiltin("sum", NativeFunction(_sumBuiltin));
     _registerBuiltin("repr", NativeFunction(_reprBuiltin));
+    _registerBuiltin("isinstance", NativeFunction(_isinstanceBuiltin));
   }
 
   T withEnvironment<T>(Environment env, T Function() callback) {
@@ -753,6 +769,89 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       name,
       NativeFunction((interp, args, kwargs) => function(args, kwargs)),
     );
+  }
+
+  /// Helper function: Register an `Exception`class
+  void _registerBuiltinExceptionClasses() {
+    String name = "Exception";
+    PyClass exceptionClass = PyClass(name, null, {});
+
+    // add an `__init__` method with optional `message`parameter
+    exceptionClass.methods["__init__"] = PyFunction.fromDef(
+      FunctionStmt(
+        Token(TokenType.IDENTIFIER, "__init__", null, 0, 0),
+        [
+          RequiredParameter(Token(TokenType.IDENTIFIER, "self", null, 0, 0)),
+          OptionalParameter(
+            Token(TokenType.IDENTIFIER, "message", null, 0, 0),
+            LiteralExpr(""),
+          ),
+        ],
+        [
+          ExpressionStmt(
+            AttributeSetExpr(
+              VariableExpr(Token(TokenType.IDENTIFIER, "self", null, 0, 0)),
+              Token(TokenType.IDENTIFIER, "message", null, 0, 0),
+              VariableExpr(Token(TokenType.IDENTIFIER, "message", null, 0, 0)),
+            ),
+            Token(TokenType.IDENTIFIER, "self", null, 0, 0),
+          ),
+        ],
+        Token(TokenType.IDENTIFIER, "__init__", null, 0, 0),
+      ),
+      globals,
+      isInitializer: true,
+    );
+
+    // Register the Exception class
+    globals.define(name, exceptionClass);
+
+    for (String name in [
+      "AttributeError",
+      "EOFError",
+      "KeyError",
+      "RuntimeError",
+      "SyntaxError",
+      "TypeError",
+      "ValueError",
+      "ZeroDivisionError",
+    ]) {
+      PyClass subExceptionClass = PyClass(
+        name,
+        exceptionClass, // `Exception` is superclass
+        {},
+      );
+
+      subExceptionClass.methods["__init__"] = PyFunction.fromDef(
+        FunctionStmt(
+          Token(TokenType.IDENTIFIER, "__init__", null, 0, 0),
+          [
+            RequiredParameter(Token(TokenType.IDENTIFIER, "self", null, 0, 0)),
+            OptionalParameter(
+              Token(TokenType.IDENTIFIER, "message", null, 0, 0),
+              LiteralExpr(name),
+            ),
+          ],
+          [
+            ExpressionStmt(
+              AttributeSetExpr(
+                VariableExpr(Token(TokenType.IDENTIFIER, "self", null, 0, 0)),
+                Token(TokenType.IDENTIFIER, "message", null, 0, 0),
+                VariableExpr(
+                  Token(TokenType.IDENTIFIER, "message", null, 0, 0),
+                ),
+              ),
+              Token(TokenType.IDENTIFIER, "self", null, 0, 0),
+            ),
+          ],
+          Token(TokenType.IDENTIFIER, "__init__", null, 0, 0),
+        ),
+        globals,
+        isInitializer: true,
+      );
+      // Register subclass in global scope
+      globals.define(name, subExceptionClass);
+    }
   }
 
   /// Default print implementation writing to stdout, handling partial lines.
@@ -1628,7 +1727,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (object is Map) {
       return '{${object.entries.map((e) => '${repr(e.key)}: ${repr(e.value)}').join(', ')}}';
     }
-
+    if (object is PyInstance &&
+        _isinstanceBuiltin(this, [object, globals.values["Exception"]], {})
+            as bool) {
+      return "${object.fields["message"]}";
+    }
     if (object is PyCallable) {
       return object.toString(); // <fn ...>, <native fn>, <method...>
     }
@@ -1639,6 +1742,56 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
     // Fallback für numbers and basic types
     return object.toString();
+  }
+
+  /// `isinstance(object, classinfo)` implementation.
+  /// Checks if `object` is an instance of `classinfo` (or of one of its subclasse).
+  /// `classinfo` can be a single class or a tuple of classes.
+  static Object? _isinstanceBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs(
+      'isinstance',
+      positionalArgs,
+      keywordArgs,
+      required: 2,
+      maxOptional: 0,
+    );
+    Object? obj = positionalArgs[0];
+    Object? classInfo = positionalArgs[1];
+    if (classInfo is PyTuple) {
+      for (var cls in classInfo.tuple) {
+        if (_isInstanceOf(obj, cls)) {
+          return true;
+        }
+      }
+      return false;
+    } else {
+      return _isInstanceOf(obj, classInfo);
+    }
+  }
+
+  /// helper function to check if `obj` is an instance of `cls`.
+  static bool _isInstanceOf(Object? obj, Object? cls) {
+    if (cls is! PyClass) {
+      throw RuntimeError(
+        builtInToken('isinstance'),
+        "TypeError: isinstance() arg 2 must be a type or tuple of types",
+      );
+    }
+    if (obj is! PyInstance) {
+      return false;
+    }
+    PyClass? currentClass = obj.klass;
+    while (currentClass != null) {
+      if (currentClass == cls) {
+        return true;
+      }
+      currentClass = currentClass.superclass;
+    }
+    return false;
   }
 
   /// Creates a dummy token for error reporting within built-ins.
@@ -1780,6 +1933,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       for (final statement in statements) {
         execute(statement);
       }
+    } on PyInstance catch (e) {
+      String excStr = "";
+      Token? token;
+      if (_lastExceptionInfo != null && _lastExceptionInfo!.exception == e) {
+        token = _lastExceptionInfo!.token;
+        excStr = "Uncaught ${e.klass.name} in line ${token.line}: ";
+      } else {
+        excStr += "${e.klass.name}: ";
+        token = Token(TokenType.NONE, "", null, -1, -1);
+      }
+      excStr += "${e.fields["message"]}";
+      //print (excStr);
+      throw RuntimeError(token, excStr);
     } on RuntimeError catch (e) {
       // TODO: Improve error reporting context (stack trace?)
       if (errorCallback != null) errorCallback(e.toString());
@@ -1936,7 +2102,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       superclassValue = evaluatedSuper;
     }
 
-    // 1. Define class in current scope (für references within methods)
+    // 1. Define class in current scope (for references within methods)
     _environment.define(stmt.name.lexeme, null); //temporary
 
     // 2. create environment for class body
@@ -2240,15 +2406,25 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         return (left as num) - (right as num);
       case TokenType.SLASH_EQUAL:
         checkNumbers("/=");
-        if (right == 0) throw RuntimeError(operator, "ZeroDivisionError");
+        if (right == 0) {
+          pyThrow(
+            "ZeroDivisionError",
+            operator,
+          ); // throw RuntimeError(operator, "ZeroDivisionError");
+        }
         return (left as num) / (right as num);
       case TokenType.SLASH_SLASH_EQUAL:
         checkNumbers("//=");
-        if (right == 0) throw RuntimeError(operator, "ZeroDivisionError");
+        if (right == 0) {
+          pyThrow(
+            "ZeroDivisionError",
+            operator,
+          ); // throw RuntimeError(operator, "ZeroDivisionError");
+        }
         return (left as num) ~/ (right as num);
       case TokenType.PERCENT_EQUAL:
         checkNumbers("%=");
-        return _pythonModulo(left as num, right as num);
+        return _pythonModulo(left as num, right as num, operator);
       case TokenType.AMPERSAND_EQUAL:
         checkInts("&=");
         return (left as int) & (right as int);
@@ -2429,19 +2605,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.SLASH:
         checkNumbers();
         if (_isZero(right)) {
-          throw RuntimeError(
-            operator,
-            "ZeroDivisionError: float division by zero",
-          );
+          pyThrow("ZeroDivisionError", operator, "float division by zero");
+          //throw RuntimeError(operator,"ZeroDivisionError: float division by zero",);
         }
         return (left as num).toDouble() / (right as num).toDouble();
       case TokenType.SLASH_SLASH:
         checkNumbers();
         if (_isZero(right)) {
-          throw RuntimeError(
+          pyThrow(
+            "ZeroDivisionError",
             operator,
-            "ZeroDivisionError: integer division or modulo by zero",
+            "integer division or modulo by zero",
           );
+          //throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero",);
         }
         return (left as num) ~/ (right as num);
       case TokenType.STAR:
@@ -2465,12 +2641,16 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.PERCENT:
         checkNumbers();
         if (_isZero(right)) {
-          throw RuntimeError(
-            operator,
-            "ZeroDivisionError: integer division or modulo by zero",
-          );
+          if (_isZero(right)) {
+            pyThrow(
+              "ZeroDivisionError",
+              operator,
+              "integer division or modulo by zero",
+            );
+            //throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero",);
+          }
         }
-        return _pythonModulo(left as num, right as num);
+        return _pythonModulo(left as num, right as num, operator);
       case TokenType.GREATER:
         checkComparable();
         return _compare(left, right, operator) > 0;
@@ -2583,10 +2763,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Helper for Python's specific modulo behavior (result has same sign as divisor).
-  num _pythonModulo(num a, num b) {
+  num _pythonModulo(num a, num b, Token token) {
     if (b == 0) {
-      throw RuntimeError(
-        Token(TokenType.PERCENT, '%', null, 0, 0),
+      pyThrow(
+        "ZeroDivisionError",
+        token,
         a is int && b is int
             ? "ZeroDivisionError: integer modulo by zero"
             : "ZeroDivisionError: float modulo",
@@ -2666,7 +2847,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       rethrow;
     } catch (e) {
       // Catch errors thrown by the call itself (e.g., wrong number of args, native errors)
-      if (e is RuntimeError) rethrow; // Re-throw our specific runtime errors
+      if (e is RuntimeError) {
+        rethrow; // Re-throw our specific runtime errors
+      }
+      if (e is PyInstance) {
+        rethrow; // Re-throw any python-exceptions (which are PyInstances)
+      }
       // Wrap other potential Dart errors
       throw RuntimeError(expr.paren, "Error during function execution: $e");
     }
@@ -3637,5 +3823,155 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         "${getTypeString(listObj)} is not subscriptable.",
       );
     }
+  }
+
+  @override
+  void visitRaiseStmt(RaiseStmt stmt) {
+    if (stmt.exception == null) {
+      // Re-raise: last exception should be raised again
+      if (_lastExceptionInfo != null) {
+        throw _lastExceptionInfo!.exception;
+      } else {
+        pyThrow(
+          "RuntimeError",
+          stmt.startToken,
+          "No active exception to reraise",
+        );
+      }
+    } else {
+      // Evaluate the expression (e.g. `ValueError("Error")`
+      Object? exceptionObj = evaluate(stmt.exception!);
+      if (exceptionObj is PyInstance) {
+        // Check if the instance is an Exception
+        if (_isException(exceptionObj)) {
+          throw exceptionObj;
+        } else {
+          throw RuntimeError(
+            Token(TokenType.IDENTIFIER, "raise", null, 0, 0),
+            "TypeError: exceptions must derive from Exception, not '${exceptionObj.klass.name}'",
+          );
+        }
+      } else if (exceptionObj is PyClass) {
+        if (_isExceptionClass(exceptionObj)) {
+          // Create and throw instance of the exception class
+          PyInstance exceptionInstance =
+              exceptionObj.call(this, [], {}) as PyInstance;
+          throw exceptionInstance;
+        } else {
+          throw RuntimeError(
+            Token(TokenType.IDENTIFIER, "raise", null, 0, 0),
+            "TypeError: exceptions must derive from Exception, not '${exceptionObj.name}'",
+          );
+        }
+      } else {
+        // Expression cannot be thrown
+        throw RuntimeError(
+          Token(TokenType.IDENTIFIER, "raise", null, 0, 0),
+          "TypeError: exceptions must derive from Exception, not '${exceptionObj.runtimeType}'",
+        );
+      }
+    }
+  }
+
+  /// Helper function: Checks if an object is an instance of an Exception class
+  bool _isException(PyInstance obj) {
+    return _isExceptionClass(obj.klass);
+  }
+
+  /// Helper function: Checks if a class is `Exception` or one of its subclasses
+  bool _isExceptionClass(PyClass klass) {
+    PyClass? currentClass = klass;
+    while (currentClass != null) {
+      if (currentClass.name == "Exception") {
+        return true;
+      }
+      currentClass = currentClass.superclass;
+    }
+    return false;
+  }
+
+  @override
+  void visitTryStmt(TryStmt stmt) {
+    bool exceptionOccurred = false;
+    try {
+      execute(stmt.tryBlock);
+    } catch (e) {
+      exceptionOccurred = true;
+      if (e is PyInstance) {
+        // check if `e` matches any of the `except` blocks
+        bool handled = false;
+        ExceptionInfo? previousLastException = _lastExceptionInfo;
+        Token token =
+            _lastExceptionInfo?.token ??
+            Token(TokenType.IDENTIFIER, "raise", null, 0, 0);
+        _lastExceptionInfo = ExceptionInfo(e, token);
+        for (var exceptClause in stmt.exceptClauses) {
+          if (exceptClause.exceptionType == null) {
+            // generic `except:` block (catches all exceptions)
+            if (exceptClause.exceptionName != null) {
+              _environment.define(exceptClause.exceptionName!.lexeme, e);
+            }
+            execute(exceptClause.block);
+            handled = true;
+            break;
+          } else {
+            // Check if the exception matches the type given in the except clause
+            String expectedType = exceptClause.exceptionType!.lexeme;
+            if (_matchesExceptionType(e, expectedType)) {
+              if (exceptClause.exceptionName != null) {
+                _environment.define(exceptClause.exceptionName!.lexeme, e);
+              }
+              execute(exceptClause.block);
+              handled = true;
+              break;
+            }
+          }
+        }
+        _lastExceptionInfo = previousLastException;
+        if (!handled) rethrow;
+      } else {
+        rethrow;
+      }
+    } finally {
+      try {
+        if (!exceptionOccurred && stmt.elseBlock != null) {
+          execute(stmt.elseBlock!);
+        }
+      } finally {
+        if (stmt.finallyBlock != null) {
+          execute(stmt.finallyBlock!);
+        }
+      }
+    }
+  }
+
+  /// Check if an exception mtaches the type in the except clause,
+  /// taking into account inheritance (e. g. `except MyBaseError` catches `MySubError` as well).
+  bool _matchesExceptionType(PyInstance exception, String expectedType) {
+    PyClass? currentClass = exception.klass;
+    while (currentClass != null) {
+      if (currentClass.name == expectedType) {
+        return true;
+      }
+      currentClass = currentClass.superclass;
+    }
+    return false;
+  }
+
+  void pyThrow(String excType, Token token, [String? message]) {
+    PyClass? errorClass;
+    // Get the exception class from the global scope
+    if (globals.values.containsKey(excType)) {
+      errorClass = globals.values[excType] as PyClass?;
+    }
+    if (errorClass == null) {
+      throw RuntimeError(token, "NameError: name '$excType' is not defined");
+    }
+    // Create an instance of the exception class
+    PyInstance exceptionInstance =
+        errorClass.call(this, [message], {}) as PyInstance;
+    // Store the exception with line and column information
+    _lastExceptionInfo = ExceptionInfo(exceptionInstance, token);
+    throw exceptionInstance;
   }
 }

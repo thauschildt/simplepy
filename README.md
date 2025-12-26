@@ -13,9 +13,10 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - boolean operators: `and`, `or`, `not`
   - `if`, `else`, `elif`
   - `for` loops, `while` loops
+  - `try`/`except`/`else`/`finally`
   - functions (default arguments, *args, **kwargs are partially implemented), `lambda` functions
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
-  `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `sum()`
+  `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `sum()`, `isinstance()`
   - list, dict and set comprehensions
   - list, string and tuple slices - read only
   - classes (no class attributes, no multiple inheritance)
@@ -27,15 +28,16 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - `int` limited to dart int: &plusmn;1<<63 native ; &plusmn;1<<53 in web
   - `dict.key()`, `dict.values()`, `dict.items()` return list copies, not dynamic views as in Python
   - set operators `| & - ^ <= >=` (but available as set1.union(set2)` etc.)
+  - `:=`operator
   - `import`
   - slice assignments (like `x[5:10] = [1,2,3])`)
   - file I/O
-  - exceptions
   - decorators
   - async functions, generators
   - `input()` and some other built-in functions
   - complex numbers
   - multiple statements in one line separated by `;`
+  - dunder methods (`__xxx__`) except for `__init__`
   - anything else not mentioned as available
 
 ## Usage

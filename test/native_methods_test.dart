@@ -1391,5 +1391,52 @@ s6 = "aba".strip("a")
         errorContains: 'TypeError: must be str or None',
       );
     });
-  }); // End String Methods group
+  });
+
+  group('isinstance', () {
+    test('should recognize type', () {
+      runSimplePyTest('''
+class A:
+  pass
+class B:
+  pass
+
+obj = A()
+print(isinstance(obj, A))  # True
+print(isinstance(obj, B))      # False
+''', expectedOutput: "True\nFalse\n");
+    });
+
+    test('check tuple of classes', () {
+      runSimplePyTest('''
+class A:
+  pass
+class B:
+  pass
+class C(A):
+  pass
+
+a = A()
+b = B()
+c = C()
+print(isinstance(a, (B,C)))  # False
+print(isinstance(b, (B,C)))  # True
+print(isinstance(c, (A,B)))  # True
+''', expectedOutput: "False\nTrue\nTrue\n");
+    });
+
+    test('should raise error if 2nd argument is not a class', () {
+      runSimplePyTest(
+        '''
+class A:
+  pass
+
+a = A()
+print(isinstance(a, "A"))
+''',
+        expectError: true,
+        errorContains: "arg 2 must be a type or tuple",
+      );
+    });
+  });
 }

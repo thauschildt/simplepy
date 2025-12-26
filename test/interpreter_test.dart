@@ -371,11 +371,13 @@ print(triple(4))
       final source = 'print(10 / 0)';
       final result = runCode(source);
       expect(result.error, isNotNull);
-      expect(result.error, isA<RuntimeError>());
-      // Optionally check the error message if it's consistent
       expect(
-        (result.error as RuntimeError).message,
-        contains('ZeroDivisionError'),
+        result.error,
+        isA<RuntimeError>().having(
+          (e) => e.message,
+          'message',
+          contains('Uncaught ZeroDivisionError'),
+        ),
       );
     });
 
@@ -2069,5 +2071,275 @@ print(x)
         expect(result.output, equals("${t[1]}\n"));
       });
     }
+  });
+
+  group('exceptions', () {
+    test("simple raise", () {
+      final result = runCode('''
+try:
+  raise Exception("xyz")
+except Exception as e:
+  print(e)
+print("ok")
+''');
+      expect(result.output, equals("xyz\nok\n"));
+    });
+
+    test("except (ZeroDivision)", () {
+      final result = runCode('''
+try:
+  x=1/0
+except Exception as e:
+  print("caught",type(e))
+''');
+      expect(result.output, contains("ZeroDivisionError"));
+      expect(result.output, contains("caught"));
+    });
+
+    test("except (modulo 0)", () {
+      final result = runCode('''
+try:
+  x=1%0
+except ZeroDivisionError as e:
+  print("caught mod error")
+''');
+      expect(result.output, contains("caught mod error"));
+    });
+
+    test("except (user exception)", () {
+      final result = runCode('''
+class MyExc(Exception):
+  pass
+try:
+  raise MyExc
+except ZeroDivisionError as e:
+  print("caught ZeroDiv")
+except MyExc as e:
+  print("caught MyExc")
+''');
+      expect(result.output, equals("caught MyExc\n"));
+    });
+
+    test("else, finally", () {
+      final result = runCode('''
+try:
+  x=1/2
+except Exception as e:
+  print("caught1")
+else:
+  print("else1")
+finally:
+  print("finally1")
+try:
+  x=1/0
+except Exception as e:
+  print("caught2")
+else:
+  print("else2")
+finally:
+  print("finally2")
+''');
+      expect(result.output, equals("else1\nfinally1\ncaught2\nfinally2\n"));
+    });
+
+    test("finally 'overwrites' return value", () {
+      final result = runCode('''
+def f(div, withfinally):
+  try:
+    x=1/div
+  except:
+    print("except")
+    return 2
+  else:
+    print("else")
+    return 3
+  finally:
+    if withfinally:
+      print("finally")
+      return 4
+
+print(f(1, False))
+print(f(1, True))
+print(f(0, False))
+print(f(0, True))
+''');
+      expect(
+        result.output,
+        equals("else\n3\nelse\nfinally\n4\nexcept\n2\nexcept\nfinally\n4\n"),
+      );
+    });
+
+    test("catch Exception outside of a function", () {
+      final result = runCode('''
+def f():
+  raise Exception("exception in f()")
+
+def g():
+  try:
+    f()
+  except:
+    print("caught in g()")
+    raise
+    
+try:
+  g()
+  print("***")
+except Exception as e:
+  print(e)
+print("OK")
+''');
+      expect(result.output, equals("caught in g()\nexception in f()\nOK\n"));
+    });
+
+    test("re-raise exception", () {
+      final result = runCode('''
+try:
+  try:
+    raise Exception("***")
+  except:
+    print("caught1")
+    raise
+except Exception as e:
+  print("caught2",e)
+print("OK")
+''');
+      expect(result.output, equals("caught1\ncaught2 ***\nOK\n"));
+    });
+
+    test("nested re-raise", () {
+      final result = runCode('''
+try:
+    try:
+        try:
+            raise ValueError("inner error")
+        except Exception as e:
+            print(f"caught1 {e}")
+            raise
+    except ValueError as e:
+        print(f"caught2 {e}")
+        raise
+except Exception as e:
+    print(f"caught3 {e}")
+''');
+      expect(
+        result.output,
+        equals(
+          "caught1 inner error\ncaught2 inner error\ncaught3 inner error\n",
+        ),
+      );
+    });
+
+    test("re-raise including else and finally", () {
+      final result = runCode('''
+try:
+    try:
+        raise Exception("error1")
+    except Exception as e:
+        print(f"caught1 {e}")
+    else:
+        print("not reached")
+    finally:
+        print("finally")
+        raise
+except Exception as e:
+    print(f"caught2 {e} {type(e)}")
+''');
+      expect(
+        result.output,
+        equals(
+          "caught1 error1\nfinally\ncaught2 No active exception to reraise <class 'RuntimeError'>\n",
+        ),
+      );
+    });
+
+    test("re-raise with multiple except blocks", () {
+      final result = runCode('''
+try:
+  try:
+    raise TypeError("error")
+  except ValueError:
+    print("caught ValueError")
+  except TypeError:
+    print("caught TypeError")
+    raise
+except TypeError as e:
+  print(f"caught outer: {e}")
+''');
+      expect(result.output, equals("caught TypeError\ncaught outer: error\n"));
+    });
+
+    test("re-raise in a function", () {
+      final result = runCode('''
+def f():
+  try:
+    raise Exception("error")
+  except:
+    print("caught in f")
+    raise
+try:
+  f()
+except Exception as e:
+  print(f"caught outer: {e}")
+''');
+      expect(result.output, equals("caught in f\ncaught outer: error\n"));
+    });
+
+    test("re-raise in a function when exception was raised outside", () {
+      final result = runCode('''
+def f():
+  print("raise in f")
+  raise
+  print("not reached")
+
+try:
+  try:
+    x=1/0
+  except Exception as e:
+    print("except1")
+    f()
+except ZeroDivisionError as e:
+  print("caught", e)
+''');
+      expect(
+        result.output,
+        equals("except1\nraise in f\ncaught float division by zero\n"),
+      );
+    });
+
+    test("re-raise in finally from one level higher", () {
+      final result = runCode('''
+try:
+ try:
+  try:
+    raise Exception("error1")
+  except Exception as e:
+    print(f"caught1 {e}")
+    raise
+ except Exception as e:
+  try:
+    print("raise2")
+    raise Exception("error2")
+  except Exception as e:
+    print(f"caught2 {e}")
+  finally:
+    raise
+except Exception as e:
+   print(f"caught3 {e}")
+''');
+      expect(
+        result.output,
+        equals("caught1 error1\nraise2\ncaught2 error2\ncaught3 error1\n"),
+      );
+    });
+
+    test("re-raise without previous exception causes error", () {
+      final result = runCode('''
+try:
+  raise
+except RuntimeError as e:
+  print(f"caught {e}")
+''');
+      expect(result.output, equals('caught No active exception to reraise\n'));
+    });
   });
 }

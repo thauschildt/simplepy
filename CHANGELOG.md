@@ -2,6 +2,8 @@
 - fixed tuple indexing
 - extended `str.startswith()` and `str.endswith()` to accept a tuple of strings as first argument
 - added `list.sort()`
+- added `Exception` classes and exception handling
+- added `isinstance` method
 
 ## 1.3.0 
 - added `global`and `nonlocal`statements
