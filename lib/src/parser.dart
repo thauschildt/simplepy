@@ -1448,7 +1448,7 @@ class Parser {
   /// Checks if the current token's type matches the given [type] without consuming it.
   /// Returns false if at the end of the token stream.
   bool check(TokenType type) {
-    if (isAtEnd()) return false;
+    if (isAtEnd() && type != TokenType.EOF) return false;
     return peek().type == type;
   }
 

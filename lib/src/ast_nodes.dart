@@ -1083,22 +1083,52 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
 
   @override
   String visitSliceExpr(SliceExpr expr) {
-    List<String> param = [printExpr(expr.list)];
-    if (expr.start != null) param.add("lower=${printExpr(expr.start!)}");
-    if (expr.stop != null) param.add("upper=${printExpr(expr.stop!)}");
-    if (expr.step != null) param.add("step=${printExpr(expr.step!)}");
-    return parenthesize("slice(${param.join(" ")})", []);
+    List<String> param = [];
+    if (expr.start != null) param.add("lower ${printExpr(expr.start!)}");
+    if (expr.stop != null) param.add("upper ${printExpr(expr.stop!)}");
+    if (expr.step != null) param.add("step ${printExpr(expr.step!)}");
+    return "(subscript (${printExpr(expr.list)} ${parenthesize("slice", param)}))";
   }
 
   @override
   String visitRaiseStmt(RaiseStmt stmt) {
-    // TODO: implement visitRaiseStmt
-    throw UnimplementedError();
+    final exception = stmt.exception;
+    return parenthesize("raise_stmt", [if (exception != null) exception]);
   }
 
   @override
   String visitTryStmt(TryStmt stmt) {
-    // TODO: implement visitTryStmt
-    throw UnimplementedError();
+    final tryBlock = printStmt(stmt.tryBlock);
+    final exceptClauses = stmt.exceptClauses
+        .map((clause) => _printExceptClause(clause))
+        .join(", ");
+    final elseBlock =
+        stmt.elseBlock; // != null ? printStmt(stmt.elseBlock!) : "null";
+    final finallyBlock =
+        stmt.finallyBlock; // != null ? printStmt(stmt.finallyBlock!) : "null";
+
+    return parenthesize("try_stmt", [
+      "body $tryBlock,",
+      "handlers [$exceptClauses],",
+      if (elseBlock != null) "orelse ${printStmt(elseBlock)},",
+      if (finallyBlock != null) "finallybody ${printStmt(finallyBlock)}",
+    ]);
+  }
+
+  // Hilfsfunktion für ExceptClause
+  String _printExceptClause(ExceptClause clause) {
+    final exceptionType =
+        clause
+            .exceptionType; // != null ? clause.exceptionType!.lexeme : "null";
+    final exceptionName =
+        clause
+            .exceptionName; // != null ? clause.exceptionName!.lexeme : "null";
+    final block = printStmt(clause.block);
+
+    return parenthesize("except", [
+      if (exceptionType != null) "type ${exceptionType.lexeme},",
+      if (exceptionName != null) "name ${exceptionName.lexeme},",
+      "body $block",
+    ]);
   }
 }

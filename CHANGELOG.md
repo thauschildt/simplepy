@@ -1,4 +1,4 @@
-## 1.3.1 - Unreleased
+## 1.3.1
 - fixed tuple indexing
 - extended `str.startswith()` and `str.endswith()` to accept a tuple of strings as first argument
 - added `list.sort()`

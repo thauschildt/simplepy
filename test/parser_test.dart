@@ -188,57 +188,62 @@ def add(a, b=1):
   group('Slices', () {
     test('should parse x[a:b] slice', () {
       final source = 'x[1:2]';
-      final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2)))';
+      final expectedAstString =
+          '(expr_stmt (subscript (x (slice lower 1 upper 2))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[:] slice', () {
       final source = 'x[:]';
-      final expectedAstString = '(expr_stmt (slice(x)))';
+      final expectedAstString = '(expr_stmt (subscript (x (slice))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[::] slice', () {
       final source = 'x[::]';
-      final expectedAstString = '(expr_stmt (slice(x)))';
+      final expectedAstString = '(expr_stmt (subscript (x (slice))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[a:b:c] slice', () {
       final source = 'x[1:2:3]';
-      final expectedAstString = '(expr_stmt (slice(x lower=1 upper=2 step=3)))';
+      final expectedAstString =
+          '(expr_stmt (subscript (x (slice lower 1 upper 2 step 3))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[a::c] slice', () {
       final source = 'x[1::3]';
-      final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
+      final expectedAstString =
+          '(expr_stmt (subscript (x (slice lower 1 step 3))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[a:b:] slice', () {
-      final source = 'x[1::3]';
-      final expectedAstString = '(expr_stmt (slice(x lower=1 step=3)))';
+      final source = 'x[1:2:]';
+      final expectedAstString =
+          '(expr_stmt (subscript (x (slice lower 1 upper 2))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[:b:c] slice', () {
       final source = 'x[:2:3]';
-      final expectedAstString = '(expr_stmt (slice(x upper=2 step=3)))';
+      final expectedAstString =
+          '(expr_stmt (subscript (x (slice upper 2 step 3))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[a:] slice', () {
       final source = 'x[1:]';
-      final expectedAstString = '(expr_stmt (slice(x lower=1)))';
+      final expectedAstString = '(expr_stmt (subscript (x (slice lower 1))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[a::] slice', () {
       final source = 'x[1::]';
-      final expectedAstString = '(expr_stmt (slice(x lower=1)))';
+      final expectedAstString = '(expr_stmt (subscript (x (slice lower 1))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[:b:] slice', () {
       final source = 'x[:2:]';
-      final expectedAstString = '(expr_stmt (slice(x upper=2)))';
+      final expectedAstString = '(expr_stmt (subscript (x (slice upper 2))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
     test('should parse x[::c] slice', () {
       final source = 'x[::3]';
-      final expectedAstString = '(expr_stmt (slice(x step=3)))';
+      final expectedAstString = '(expr_stmt (subscript (x (slice step 3))))';
       expect(parseAndPrint(source), equals(expectedAstString));
     });
   });
@@ -330,6 +335,54 @@ def add(a, b=1):
       final result2 = parseAndCollectErrors('def foo(): return 1 2');
       expect(result2.hasErrors, isTrue);
       expect(result2.errors.first, contains("Unexpected token"));
+    });
+  });
+
+  group('Parse try, raise', () {
+    test('should parse simple try/except', () {
+      final source = '''
+try:
+  x=1/0
+except:
+  pass
+  ''';
+      final expectedAstString =
+          '(try_stmt body {\n  (expr_stmt (assign x (/ 1 0)))\n}, handlers [(except body {\n  (pass)\n})],)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+
+    test('should parse try with exception type, else and finally', () {
+      final source = '''
+try:
+  pass
+except ValueError as e:
+  pass
+else:
+  pass
+finally:
+  pass
+  ''';
+      final expectedAstString =
+          '(try_stmt body {\n  (pass)\n}, handlers [(except type ValueError, name e, body {\n  (pass)\n})], orelse {\n  (pass)\n}, finallybody {\n  (pass)\n})';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+
+    test('should parse re-raise', () {
+      final source = 'raise';
+      final expectedAstString = '(raise_stmt)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+
+    test('should parse raise with type', () {
+      final source = 'raise Exception';
+      final expectedAstString = '(raise_stmt Exception)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+
+    test('should parse raise with type and variable name', () {
+      final source = 'raise Exception("e")';
+      final expectedAstString = '(raise_stmt (call Exception \'e\'))';
+      expect(parseAndPrint(source), equals(expectedAstString));
     });
   });
 }
