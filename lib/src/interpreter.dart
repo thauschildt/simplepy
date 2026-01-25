@@ -56,8 +56,8 @@ abstract class PyCallable {
   );
 }
 
+/// Wrapper for python `list`
 class PyList {
-  // Wrapper for Python-Lists
   final List<Object?> list;
   PyList(this.list);
   @override
@@ -65,12 +65,12 @@ class PyList {
   int get length => list.length;
 }
 
+/// Wrapper for python `tuple`
 class PyTuple {
-  // Wrapper for Python-Tuples
   final List<Object?> tuple; // Internally a list
   PyTuple(this.tuple);
   @override
-  int get hashCode => Interpreter._computeTupleHash(tuple); // Stellt Hashbarkeit sicher
+  int get hashCode => Interpreter._computeTupleHash(tuple); // ensure hashability
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -88,6 +88,111 @@ class PyTuple {
 
   @override
   String toString() => "PyTuple(${tuple.toString()})"; // For debugging
+}
+
+/// Wrapper for python files
+class PyFile {
+  String name;
+  String _content;
+  int _position = 0;
+  bool isClosed = true;
+  bool isReadable=false, isWriteable=false, isAppend=false;
+
+  PyFile(this.name, [String mode="r", String initialContent = '']) : _content = initialContent, isClosed=false {
+    switch (mode) {
+      case "r+": isReadable = true; isWriteable = true;
+      case "r": isReadable = true;
+      case "w+": isWriteable = true; isReadable = true;
+      case "w": isWriteable = true;
+      case "a+": isReadable = true; isAppend = true;
+      case "a": isAppend = true;
+      default: throw Exception("ValueError: invalid mode '$mode'");
+    }
+    if (isAppend) isWriteable = true;
+    if (mode=="a") _seekEnd();
+  }
+
+  int get length => _content.length;
+
+  String read([int n=-1]) {
+    if (n<0) n=_content.length;
+    if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
+    if (!isReadable) throw Exception("not readable");
+    String data = _content.substring(_position, n);
+    _position = n;
+    return data;
+  }
+  
+  String? readline([int n=-1]) {
+    if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
+    if (!isReadable) throw Exception("not readable");
+    if (_position >= _content.length) return "";
+
+    int nextNewline = _content.indexOf('\n', _position);
+    if (nextNewline == -1) {
+      nextNewline = _content.length - 1;
+    }
+    int end=min(nextNewline + 1, n<0? _content.length : _position + n);
+    final line = _content.substring(_position, end);
+    _position = end;
+    return line;
+  }
+
+  PyList readlines([int n=-1]) {
+    if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
+    if (!isReadable) throw Exception("not readable");
+    String data = n < 0 ? read() : read(n);
+    if (data.isEmpty) return PyList([]);
+    List<String> lines = [];
+    List<String> parts = data.split("\n");
+    for (int i = 0; i < parts.length; i++) {
+      String line = parts[i];
+      if (i != parts.length - 1) line += "\n";
+      lines.add(line);
+    }
+    int newLine = _content.indexOf("\n", _position);
+    if (newLine>=0) {
+      lines.last += _content.substring(_position, newLine+1);
+    }
+    return PyList(lines);
+  }
+
+  void write(String text) {
+    if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
+    if (!isWriteable) throw Exception("not writeable");
+    if (isAppend) _seekEnd();
+    final before = _content.substring(0, _position);
+    final after = _position + text.length < _content.length
+        ? _content.substring(_position + text.length)
+        : "";
+    _content = before + text + after;
+    _position = _position + text.length;
+  }
+
+  void writelines(List lines) {
+    if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
+    if (!isWriteable) throw Exception("not writeable");
+    if (isAppend) _seekEnd();
+    for (var line in lines) {
+      if (line is! String) throw Exception("TypeError: write() argument must be str, not ${line.runtimeType}");
+      write(line);
+    }
+  }
+
+  void _seekEnd() {
+    _position = _content.length;
+  }
+
+  void seek(int position) {
+    if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
+    if (position<0) throw Exception("ValueError: negative seek position $position");
+    _position = position.clamp(0, _content.length);
+  }
+
+  void close(vfs) {
+    vfs[name] = _content.toString();
+    isClosed = true;
+  }
 }
 
 /// Signatue of native methods
@@ -703,6 +808,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// The currently active environment during execution. Changes as scopes are entered/exited.
   late Environment _environment;
 
+  /// Virtual file system
+  Map<String, String> vfs = {};
+
   /// The exception caught last, to be used for re-raise
   ExceptionInfo? _lastExceptionInfo;
 
@@ -747,6 +855,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("sum", NativeFunction(_sumBuiltin));
     _registerBuiltin("repr", NativeFunction(_reprBuiltin));
     _registerBuiltin("isinstance", NativeFunction(_isinstanceBuiltin));
+    _registerBuiltin("open", NativeFunction(_openBuiltin));
   }
 
   T withEnvironment<T>(Environment env, T Function() callback) {
@@ -1793,6 +1902,38 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
     return false;
   }
+
+  /// open file in virtual file system
+  PyFile _openBuiltin(Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs) {
+    _checkNumArgs(
+      'open',
+      positionalArgs,
+      keywordArgs,
+      required: 1,
+      maxOptional: 1,
+    );
+    _checkNoKeywords('open', keywordArgs);
+    String filename = positionalArgs[0] as String;
+    String mode = positionalArgs.length==2 ? positionalArgs[1] as String : "r";
+    if (!["r","w","a","r+","w+","a+"].contains(mode)) {
+      pyThrow("ValueError", Token(TokenType.IDENTIFIER, "open", null, 0,0), "ValueError: invalid mode: '$mode'");
+    }
+    if (!vfs.containsKey(filename)) {
+      if (mode.contains('w')) {
+        vfs[filename] = "";
+        return PyFile(filename, mode);
+      } else {
+        pyThrow("FileNotFoundError",
+          Token(TokenType.IDENTIFIER, "open", null, 0,0),
+          "FileNotFoundError: No such file: '$filename'");
+      }
+    }
+    var file = PyFile(filename, mode, vfs[filename]!);
+    return file;
+  }
+
 
   /// Creates a dummy token for error reporting within built-ins.
   static Token builtInToken(String name) {
@@ -3331,6 +3472,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       }
     } else if (object is String) {
       impl = native_methods.stringMethodImpls[name];
+      if (impl != null) {
+        return PyBoundNativeMethod(object, impl, name);
+      }
+    } else if (object is PyFile) {
+      impl = native_methods.fileMethodImpls[name];
       if (impl != null) {
         return PyBoundNativeMethod(object, impl, name);
       }

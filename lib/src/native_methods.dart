@@ -88,6 +88,46 @@ final Map<String, PyCallableNativeImpl> listMethodImpls = {
   'sort': listSort,
 };
 
+final Map<String, PyCallableNativeImpl> fileMethodImpls = {
+  'read': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('read', posArgs, kwArgs, required: 0, maxOptional: 1);
+    int n = posArgs.isNotEmpty? posArgs[0] as int : -1;
+    return (receiver as PyFile).read(n);
+  },
+  'readline': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('readline', posArgs, kwArgs, required: 0, maxOptional: 1);
+    int n = posArgs.isNotEmpty? posArgs[0] as int : -1;
+    return (receiver as PyFile).readline(n);
+  },
+  'readlines': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('readlines', posArgs, kwArgs, required: 0, maxOptional: 1);
+    int n = posArgs.isNotEmpty? posArgs[0] as int : -1;
+    return (receiver as PyFile).readlines(n);
+  },
+  'write': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('write', posArgs, kwArgs, required: 1);
+    checkNoKeywords('write', kwArgs);
+    (receiver as PyFile).write(posArgs[0].toString());
+    return null;
+  },
+  'writelines': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('writelines', posArgs, kwArgs, required: 1);
+    checkNoKeywords('writelines', kwArgs);
+    (receiver as PyFile).writelines((posArgs[0] as PyList).list as List);
+    return null;
+  },
+  'seek': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('close', posArgs, kwArgs, required: 1);
+    (receiver as PyFile).seek(posArgs[0] as int);
+    return null;
+  },
+  'close': (interpreter, receiver, posArgs, kwArgs) {
+    checkNumArgs('close', posArgs, kwArgs, required: 0);
+    (receiver as PyFile).close(interpreter.vfs);
+    return null;
+  },
+};
+
 final Map<String, PyCallableNativeImpl> dictMethodImpls = {
   'keys': dictKeys,
   'values': dictValues,

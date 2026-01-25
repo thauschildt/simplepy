@@ -1,3 +1,6 @@
+## 1.3.1  (Unreleased)
+- added file IO (using virtual file system, only text files)
+
 ## 1.3.1
 - fixed tuple indexing
 - extended `str.startswith()` and `str.endswith()` to accept a tuple of strings as first argument

@@ -21,6 +21,10 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - list, string and tuple slices - read only
   - classes (no class attributes, no multiple inheritance)
   - `global` and `nonlocal` variables
+  - limited file I/O: files can be created using `f=open(filename,mode)`. `mode` can be w,r,a,w+,r+,a+. No binary files.
+    Available methods: `f.read(n)`, `f.readline(n)`, `f.readlines(n)`, `f.write(text)`, `f.writelines(list)`, `f.seek(position)`, `f.close()`.
+    File contents are kept in memory in a dictionary as long as the Interpreter object exists.
+    To make make them persistent, one can access them from dart by `interpreter.vfs[filename]`.
 
   Some more features might be added soon, but this will never become a full python interpreter.
 
@@ -31,7 +35,6 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - `:=`operator
   - `import`
   - slice assignments (like `x[5:10] = [1,2,3])`)
-  - file I/O
   - decorators
   - async functions, generators
   - `input()` and some other built-in functions

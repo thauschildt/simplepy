@@ -2342,4 +2342,176 @@ except RuntimeError as e:
       expect(result.output, equals('caught No active exception to reraise\n'));
     });
   });
+
+  group('Files', () {
+    test("write, read", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("ABC")
+f.close()
+f=open("tmp.txt","r")
+print(f.read())
+''');
+      expect(result.output, equals('ABC\n'));
+    });
+
+    test("append", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("ABC")
+f.close()
+f=open("tmp.txt","a")
+f.write("123")
+f.close()
+f=open("tmp.txt","r")
+print(f.read())
+''');
+      expect(result.output, equals('ABC123\n'));
+    });
+
+    test("mode r+", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("ABC")
+f.close()
+f=open("tmp.txt","r+")
+f.write("ab")
+f.seek(0)
+print(f.read())
+''');
+      expect(result.output, equals('abC\n'));
+    });
+
+    test("mode w+", () {
+      final result = runCode('''
+f=open("tmp2.txt","w+")
+f.write("ABC")
+f.seek(1)
+print(f.read())
+''');
+      expect(result.output, equals('BC\n'));
+    });
+
+    test("mode a+", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("ABC")
+f.close()
+
+f=open("tmp.txt","a+")
+f.seek(1)
+print(f.read())
+f.seek(1)
+f.write("XY")
+f.seek(0)
+print(f.read())
+''');
+      expect(result.output, equals('BC\nABCXY\n'));
+    });
+
+    test("cannot read in write mode", () {
+      final result = runCode("""
+f=open("tmp.txt","w")
+print(f.read())
+""");
+      expect(
+        result.error,
+        isA<RuntimeError>().having(
+          (e) => e.message,
+          'message',
+          contains('not readable'),
+        ),
+      );
+    });
+
+    test("readline basic", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("A\\nBB\\nCCC")
+f.close()
+
+f=open("tmp.txt","r")
+print(f.readline())
+print(f.readline())
+print(f.readline())
+    ''');
+      expect(result.output, equals('A\n\nBB\n\nCCC\n'));
+    });
+
+    test("readline with size", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("ABCDE\\nFG")
+f.close()
+
+f=open("tmp.txt","r")
+print(f.readline(3))
+print(f.readline(10))
+    ''');
+      // readline(size) liest max. size Zeichen, auch mitten in der Zeile
+      expect(result.output, equals('ABC\nDE\n\n'));
+    });
+
+    test("readlines basic", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("A\\nBB\\nCCC")
+f.close()
+
+f=open("tmp.txt","r")
+print(f.readlines())
+    ''');
+      expect(result.output, equals("['A\\n', 'BB\\n', 'CCC']\n"));
+    });
+
+    test("readlines with sizehint", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.write("A\\nBB\\nCCC\\nDDDD")
+f.close()
+
+f=open("tmp.txt","r")
+print(f.readlines(1))
+f.seek(0)
+print(f.readlines(3))
+    ''');
+      // sizehint ist nur ein Hint → mindestens eine Zeile
+      expect(result.output, equals("['A\\n']\n['A\\n', 'BB\\n']\n"));
+    });
+
+    test("writelines basic", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.writelines(["A\\n", "BB\\n", "CCC"])
+f.close()
+
+f=open("tmp.txt","r")
+print(f.read())
+''');
+  expect(result.output, equals('A\nBB\nCCC\n'));
+});
+
+    test("writelines without newlines", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.writelines(["A", "B", "C"])
+f.close()
+
+f=open("tmp.txt","r")
+print(f.read())
+''');
+      expect(result.output, equals('ABC\n'));
+    });
+
+    test("writelines requires iterable of strings", () {
+      final result = runCode('''
+f=open("tmp.txt","w")
+f.writelines([1, 2, 3])
+''');
+      expect(
+        result.error,
+        isA<Exception>(),
+      );
+    });
+  });
 }
