@@ -404,9 +404,7 @@ s.remove(1) # Removes 1/True
 s_final = s
 ok = s== {2}
 ''',
-        expectedVariables: {
-          'ok': true,
-        },
+        expectedVariables: {'ok': true},
       );
       expect(
         runCode('s={1}\ns.remove(2)').error,
@@ -444,9 +442,7 @@ s.discard(99) # Not present, no error
 s.discard([]) # Unhashable, no error (in Python)
 ok = s=={2}
 ''',
-        expectedVariables: {
-          'ok': true,
-        },
+        expectedVariables: {'ok': true},
       );
       // Check no error for unhashable
       expect(runCode('s={1}\ns.discard([])').error, isNull);
@@ -768,9 +764,7 @@ s.update("ab")   # Update with string
 s.update(set())  # Update with empty
 ok = s == {1, 2, 3, 4, 'a', 'b'}
 ''',
-        expectedVariables: {
-          'ok': true
-        },
+        expectedVariables: {'ok': true},
       );
       // Test operator if implemented
       //runSimplePyTest('s={1}; s |= {2}; print(s)', expectedOutput: '{1, 2}\n');
@@ -844,9 +838,7 @@ v5 = {}.get('a')
 v6 = {}.get('a', 100)
 ok = [v1, v2, v3, v4, v5, v6] == [1, None, 99, 1, None, 100]
 ''',
-        expectedVariables: {
-          'ok': true,
-        },
+        expectedVariables: {'ok': true},
       );
       // Test with unhashable key (should return default or None)
       runSimplePyTest("v = {'a':1}.get([])", expectedVariables: {'v': null});
@@ -919,10 +911,7 @@ d2.update(d)
 ok1 = d == {'a': 100, 'b': 2, 'c': 3, 'd': 4}
 ok2 = d2 == {'a': 100, 'b': 2, 'c': 3, 'd': 4}
 ''',
-        expectedVariables: {
-          'ok1': true,
-          'ok2': true,
-        },
+        expectedVariables: {'ok1': true, 'ok2': true},
       );
       runSimplePyTest(
         "{'a':1}.update([['b', 2], ['c']])",

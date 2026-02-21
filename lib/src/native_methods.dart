@@ -92,17 +92,17 @@ final Map<String, PyCallableNativeImpl> listMethodImpls = {
 final Map<String, PyCallableNativeImpl> fileMethodImpls = {
   'read': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('read', posArgs, kwArgs, required: 0, maxOptional: 1);
-    int n = posArgs.isNotEmpty? posArgs[0] as int : -1;
+    int n = posArgs.isNotEmpty ? posArgs[0] as int : -1;
     return (receiver as PyFile).read(n);
   },
   'readline': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('readline', posArgs, kwArgs, required: 0, maxOptional: 1);
-    int n = posArgs.isNotEmpty? (posArgs[0] as BigInt).toInt() : -1;
+    int n = posArgs.isNotEmpty ? (posArgs[0] as BigInt).toInt() : -1;
     return (receiver as PyFile).readline(n);
   },
   'readlines': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('readlines', posArgs, kwArgs, required: 0, maxOptional: 1);
-    int n = posArgs.isNotEmpty? (posArgs[0] as BigInt).toInt() : -1;
+    int n = posArgs.isNotEmpty ? (posArgs[0] as BigInt).toInt() : -1;
     return (receiver as PyFile).readlines(n);
   },
   'write': (interpreter, receiver, posArgs, kwArgs) {

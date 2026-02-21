@@ -96,34 +96,46 @@ class PyFile {
   String _content;
   int _position = 0;
   bool isClosed = true;
-  bool isReadable=false, isWriteable=false, isAppend=false;
+  bool isReadable = false, isWriteable = false, isAppend = false;
 
-  PyFile(this.name, [String mode="r", String initialContent = '']) : _content = initialContent, isClosed=false {
+  PyFile(this.name, [String mode = "r", String initialContent = ''])
+    : _content = initialContent,
+      isClosed = false {
     switch (mode) {
-      case "r+": isReadable = true; isWriteable = true;
-      case "r": isReadable = true;
-      case "w+": isWriteable = true; isReadable = true;
-      case "w": isWriteable = true;
-      case "a+": isReadable = true; isAppend = true;
-      case "a": isAppend = true;
-      default: throw Exception("ValueError: invalid mode '$mode'");
+      case "r+":
+        isReadable = true;
+        isWriteable = true;
+      case "r":
+        isReadable = true;
+      case "w+":
+        isWriteable = true;
+        isReadable = true;
+      case "w":
+        isWriteable = true;
+      case "a+":
+        isReadable = true;
+        isAppend = true;
+      case "a":
+        isAppend = true;
+      default:
+        throw Exception("ValueError: invalid mode '$mode'");
     }
     if (isAppend) isWriteable = true;
-    if (mode=="a") _seekEnd();
+    if (mode == "a") _seekEnd();
   }
 
   int get length => _content.length;
 
-  String read([int n=-1]) {
-    if (n<0) n=_content.length;
+  String read([int n = -1]) {
+    if (n < 0) n = _content.length;
     if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
     if (!isReadable) throw Exception("not readable");
     String data = _content.substring(_position, n);
     _position = n;
     return data;
   }
-  
-  String? readline([int n=-1]) {
+
+  String? readline([int n = -1]) {
     if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
     if (!isReadable) throw Exception("not readable");
     if (_position >= _content.length) return "";
@@ -132,13 +144,13 @@ class PyFile {
     if (nextNewline == -1) {
       nextNewline = _content.length - 1;
     }
-    int end=min(nextNewline + 1, n<0? _content.length : _position + n);
+    int end = min(nextNewline + 1, n < 0 ? _content.length : _position + n);
     final line = _content.substring(_position, end);
     _position = end;
     return line;
   }
 
-  PyList readlines([int n=-1]) {
+  PyList readlines([int n = -1]) {
     if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
     if (!isReadable) throw Exception("not readable");
     String data = n < 0 ? read() : read(n);
@@ -151,8 +163,8 @@ class PyFile {
       lines.add(line);
     }
     int newLine = _content.indexOf("\n", _position);
-    if (newLine>=0) {
-      lines.last += _content.substring(_position, newLine+1);
+    if (newLine >= 0) {
+      lines.last += _content.substring(_position, newLine + 1);
     }
     return PyList(lines);
   }
@@ -162,9 +174,10 @@ class PyFile {
     if (!isWriteable) throw Exception("not writeable");
     if (isAppend) _seekEnd();
     final before = _content.substring(0, _position);
-    final after = _position + text.length < _content.length
-        ? _content.substring(_position + text.length)
-        : "";
+    final after =
+        _position + text.length < _content.length
+            ? _content.substring(_position + text.length)
+            : "";
     _content = before + text + after;
     _position = _position + text.length;
   }
@@ -174,7 +187,11 @@ class PyFile {
     if (!isWriteable) throw Exception("not writeable");
     if (isAppend) _seekEnd();
     for (var line in lines) {
-      if (line is! String) throw Exception("TypeError: write() argument must be str, not ${line.runtimeType}");
+      if (line is! String) {
+        throw Exception(
+          "TypeError: write() argument must be str, not ${line.runtimeType}",
+        );
+      }
       write(line);
     }
   }
@@ -185,7 +202,9 @@ class PyFile {
 
   void seek(int position) {
     if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
-    if (position.isNegative) throw Exception("ValueError: negative seek position $position");
+    if (position.isNegative) {
+      throw Exception("ValueError: negative seek position $position");
+    }
     _position = position.clamp(0, _content.length);
   }
 
@@ -1910,9 +1929,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// open file in virtual file system
-  PyFile _openBuiltin(Interpreter interpreter,
+  PyFile _openBuiltin(
+    Interpreter interpreter,
     List<Object?> positionalArgs,
-    Map<String, Object?> keywordArgs) {
+    Map<String, Object?> keywordArgs,
+  ) {
     _checkNumArgs(
       'open',
       positionalArgs,
@@ -1922,24 +1943,30 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     );
     _checkNoKeywords('open', keywordArgs);
     String filename = positionalArgs[0] as String;
-    String mode = positionalArgs.length==2 ? positionalArgs[1] as String : "r";
-    if (!["r","w","a","r+","w+","a+"].contains(mode)) {
-      pyThrow("ValueError", Token(TokenType.IDENTIFIER, "open", null, 0,0), "ValueError: invalid mode: '$mode'");
+    String mode =
+        positionalArgs.length == 2 ? positionalArgs[1] as String : "r";
+    if (!["r", "w", "a", "r+", "w+", "a+"].contains(mode)) {
+      pyThrow(
+        "ValueError",
+        Token(TokenType.IDENTIFIER, "open", null, 0, 0),
+        "ValueError: invalid mode: '$mode'",
+      );
     }
     if (!vfs.containsKey(filename)) {
       if (mode.contains('w')) {
         vfs[filename] = "";
         return PyFile(filename, mode);
       } else {
-        pyThrow("FileNotFoundError",
-          Token(TokenType.IDENTIFIER, "open", null, 0,0),
-          "FileNotFoundError: No such file: '$filename'");
+        pyThrow(
+          "FileNotFoundError",
+          Token(TokenType.IDENTIFIER, "open", null, 0, 0),
+          "FileNotFoundError: No such file: '$filename'",
+        );
       }
     }
     var file = PyFile(filename, mode, vfs[filename]!);
     return file;
   }
-
 
   /// Creates a dummy token for error reporting within built-ins.
   static Token builtInToken(String name) {
@@ -2437,9 +2464,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   bool isNum(dynamic arg) {
     return arg is num || arg is BigInt;
   }
+
   bool isInt(dynamic arg) {
     return arg is int || arg is BigInt;
   }
+
   int toInt(dynamic arg, Token token) {
     if (arg is int) return arg;
     if (arg is BigInt) return arg.toInt();
@@ -2543,7 +2572,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         if (left is BigInt && right is BigInt) return left * right;
         if (left is BigInt && right is double) return left.toDouble() * right;
         if (left is double && right is BigInt) return left * right.toDouble();
-        
+
         if ((left is String || left is PyList) && isInt(right)) {
           return _multiplySequence(left!, toInt(right, operator), operator);
         }
@@ -2558,8 +2587,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         checkNumbers("**=");
         if (left is num && right is num) return pow(left, right);
         if (left is BigInt && right is BigInt) return left.pow(right.toInt());
-        if (left is BigInt && right is double) return pow(left.toDouble(), right);
-        if (left is double && right is BigInt) return pow(left, right.toDouble());
+        if (left is BigInt && right is double) {
+          return pow(left.toDouble(), right);
+        }
+        if (left is double && right is BigInt) {
+          return pow(left, right.toDouble());
+        }
         throw RuntimeError(
           operator,
           "Unsupported operand type(s) for **=: '${left?.runtimeType}' and '${right?.runtimeType}'",
@@ -2569,7 +2602,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         if (left is BigInt && right is BigInt) return left + right;
         if (left is BigInt && right is double) return left.toDouble() + right;
         if (left is double && right is BigInt) return left + right.toDouble();
-        
+
         if (left is String && right is String) return left + right;
         if (left is List && right is List) return [...left, ...right];
         throw RuntimeError(
@@ -2622,9 +2655,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         checkNumbers("%=");
         if (!isNum(left) || !isNum(right)) {
           throw RuntimeError(
-          operator,
-          "Unsupported operand type(s) for //=: '${left?.runtimeType}' and '${right?.runtimeType}'",
-        );
+            operator,
+            "Unsupported operand type(s) for //=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+          );
         }
         return _pythonModulo(left as num, right as num, operator);
       case TokenType.AMPERSAND_EQUAL:
@@ -2727,7 +2760,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.NOT:
         return !isTruthy(operand);
       case TokenType.MINUS:
-        if (isNum(operand)) return operand is num? -operand : -(operand as BigInt);
+        if (isNum(operand)) {
+          return operand is num ? -operand : -(operand as BigInt);
+        }
         throw RuntimeError(
           expr.operator,
           "Operand for unary '-' must be a number (got ${operand?.runtimeType}).",
@@ -2739,7 +2774,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           "Operand for unary '+' must be a number (got ${operand?.runtimeType}).",
         );
       case TokenType.TILDE:
-        if (isInt(operand)) return ~(operand as BigInt); // - (operand + 1) should be the same
+        if (isInt(operand)) {
+          return ~(operand as BigInt); // - (operand + 1) should be the same
+        }
         // Python allows ~ on bool (True -> -2, False -> -1), but not on float
         if (operand is bool) {
           return operand ? -(1 + 1) : -(0 + 1); // results in -2 and -1
@@ -2869,8 +2906,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         checkNumbers();
         if (left is num && right is num) return pow(left, right);
         if (left is BigInt && right is BigInt) return left.pow(right.toInt());
-        if (left is BigInt && right is double) return pow(left.toDouble(), right);
-        if (left is double && right is BigInt) return pow(left, right.toDouble());
+        if (left is BigInt && right is double) {
+          return pow(left.toDouble(), right);
+        }
+        if (left is double && right is BigInt) {
+          return pow(left, right.toDouble());
+        }
         throw RuntimeError(
           operator,
           "TypeError: unsupported operand type(s) for **: '${getTypeString(left)}' and '${getTypeString(right)}'",
@@ -2978,7 +3019,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
   bool _isZero(Object? obj) {
     if (obj is num) return obj == 0;
-    if (obj is BigInt) return obj==BigInt.zero;
+    if (obj is BigInt) return obj == BigInt.zero;
     return false;
   }
 
@@ -2994,8 +3035,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   int _compare(Object? left, Object? right, Token operator) {
     if (left is num && right is num) return left.compareTo(right);
     if (left is BigInt && right is BigInt) return left.compareTo(right);
-    if (left is BigInt && right is double) return left.toDouble().compareTo(right);
-    if (left is double && right is BigInt) return left.compareTo(right.toDouble());
+    if (left is BigInt && right is double) {
+      return left.toDouble().compareTo(right);
+    }
+    if (left is double && right is BigInt) {
+      return left.compareTo(right.toDouble());
+    }
     if (left is String && right is String) return left.compareTo(right);
     // Python cannot compare different types (except for numbers)
     throw RuntimeError(
@@ -3017,10 +3062,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
     var result = a % b;
     if (result is BigInt) {
-      if (result >= BigInt.zero != (b as BigInt)>=BigInt.zero) {
+      if (result >= BigInt.zero != (b as BigInt) >= BigInt.zero) {
         result += b;
       }
-    } else if (result >= 0 != b >= 0) { // double
+    } else if (result >= 0 != b >= 0) {
+      // double
       result += b;
     }
     return result;
@@ -3053,7 +3099,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (callee is! PyCallable) {
       throw RuntimeError(
         expr.paren,
-        "Object of type '${getTypeString(callee?? 'None')}' is not callable.",
+        "Object of type '${getTypeString(callee ?? 'None')}' is not callable.",
       );
     }
     PyCallable function = callee;
@@ -3355,7 +3401,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     switch (type) {
       case 'd': // Integer
         if (align == '') align = '>';
-        if (value is bool) value = BigInt.from(value ? 1 : 0); // Handle bools as ints
+        if (value is bool) {
+          value = BigInt.from(value ? 1 : 0); // Handle bools as ints
+        }
         if (!isInt(value)) {
           // Try converting floats if they are whole numbers
           if (value is double && value.truncateToDouble() == value) {
@@ -3383,7 +3431,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             "Cannot format value of type '${getTypeString(value)}' with 'f'",
           );
         }
-        double numValue = isInt(value) ? (value as BigInt).toDouble() : value as double;
+        double numValue =
+            isInt(value) ? (value as BigInt).toDouble() : value as double;
         formattedValue = numValue.toStringAsFixed(precision);
         // Handle sign for float
         if (numValue >= 0 && sign == '+') {
@@ -3511,7 +3560,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Mimics Python's rules (numbers, strings, booleans, None are hashable; lists, dicts are not).
   static bool isHashable(Object? key) {
     if (key == null) return true; // None is hashable
-    if (key is num || key is BigInt ||
+    if (key is num ||
+        key is BigInt ||
         key is String ||
         key is bool ||
         key is PyCallable ||
@@ -3669,7 +3719,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (object == null) return false; // None is falsey
     if (object is bool) return object; // Booleans are themselves
     if (object is num) return object != 0; // Zero is falsey, others are truthy
-    if (object is BigInt) return object != BigInt.zero; // Zero is falsey, others are truthy
+    if (object is BigInt) {
+      return object != BigInt.zero; // Zero is falsey, others are truthy
+    }
     if (object is String) return object.isNotEmpty; // Empty string is falsey
     if (object is PyList) return object.list.isNotEmpty; // Empty list is falsey
     if (object is Map) return object.isNotEmpty; // Empty map is falsey
@@ -3772,12 +3824,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         (a is String && b is String)) {
       return a == b;
     }
-    if (a is num && b is bool) return a==(b?1:0);
-    if (b is num && a is bool) return b==(a?1:0);
+    if (a is num && b is bool) return a == (b ? 1 : 0);
+    if (b is num && a is bool) return b == (a ? 1 : 0);
     if (a is BigInt && (b is num)) return a == BigInt.from(b);
-    if (a is BigInt && (b is bool)) return a == BigInt.from(b? 1:0);
+    if (a is BigInt && (b is bool)) return a == BigInt.from(b ? 1 : 0);
     if (b is BigInt && (a is num)) return b == BigInt.from(a);
-    if (b is BigInt && (a is bool)) return b == BigInt.from(a? 1:0);
+    if (b is BigInt && (a is bool)) return b == BigInt.from(a ? 1 : 0);
     // --- Other Types (Callables, Classes, Instances) ---
     // Default Python behavior is identity comparison unless __eq__ is implemented.
     if (a is PyCallable && b is PyCallable) return identical(a, b);

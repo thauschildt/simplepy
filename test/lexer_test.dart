@@ -3,7 +3,12 @@ import 'package:test/test.dart';
 import 'package:test/test.dart' as testpkg;
 
 final _origExpect = testpkg.expect;
-void expect(dynamic actual, dynamic expected, {dynamic matcher, dynamic reason}) {
+void expect(
+  dynamic actual,
+  dynamic expected, {
+  dynamic matcher,
+  dynamic reason,
+}) {
   matcher ??= expected;
   if (matcher is int && actual is! int) {
     matcher = BigInt.from(matcher);
@@ -122,7 +127,7 @@ void main() {
               .map((t) => t.literal)
               .toList();
       var expected = [123, 64, 0.5, 0.5, 5.0, 2, 99, 7];
-      for (var i=0; i<literals.length; i++) {
+      for (var i = 0; i < literals.length; i++) {
         expect(literals[i], expected[i]);
       }
     });

@@ -6,7 +6,12 @@ import 'package:simplepy/src/interpreter.dart';
 import 'package:simplepy/src/ast_nodes.dart';
 
 final _origExpect = testpkg.expect;
-void expect(dynamic actual, dynamic expected, {dynamic matcher, dynamic reason}) {
+void expect(
+  dynamic actual,
+  dynamic expected, {
+  dynamic matcher,
+  dynamic reason,
+}) {
   matcher ??= expected;
   if (matcher is int && actual is! int) {
     matcher = BigInt.from(matcher);
@@ -1925,7 +1930,7 @@ print(x)
       ],
     ];
 
-    for (var t in tests.sublist(0,10)) {
+    for (var t in tests.sublist(0, 10)) {
       test(t[0], () {
         final result = runCode("print(${t[0]})");
         expect(result.output, equals("${t[1]}\n"));
@@ -2502,8 +2507,8 @@ f.close()
 f=open("tmp.txt","r")
 print(f.read())
 ''');
-  expect(result.output, equals('A\nBB\nCCC\n'));
-});
+      expect(result.output, equals('A\nBB\nCCC\n'));
+    });
 
     test("writelines without newlines", () {
       final result = runCode('''
@@ -2522,10 +2527,7 @@ print(f.read())
 f=open("tmp.txt","w")
 f.writelines([1, 2, 3])
 ''');
-      expect(
-        result.error,
-        isA<Exception>(),
-      );
+      expect(result.error, isA<Exception>());
     });
   });
 }
