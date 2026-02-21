@@ -1,5 +1,6 @@
-## 1.3.1  (Unreleased)
+## 1.3.2
 - added file IO (using virtual file system, only text files)
+- use BigInt instead of int, so that integers are not limited to 2^63 any more
 
 ## 1.3.1
 - fixed tuple indexing

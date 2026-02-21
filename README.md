@@ -12,7 +12,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - comparisons: `== > >= < <= !=`
   - boolean operators: `and`, `or`, `not`
   - `if`, `else`, `elif`
-  - `for` loops, `while` loops
+  - `for` loops, `while` loops (but `else:` block is not yet available)
   - `try`/`except`/`else`/`finally`
   - functions (default arguments, *args, **kwargs are partially implemented), `lambda` functions
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
@@ -24,14 +24,14 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - limited file I/O: files can be created using `f=open(filename,mode)`. `mode` can be w,r,a,w+,r+,a+. No binary files.
     Available methods: `f.read(n)`, `f.readline(n)`, `f.readlines(n)`, `f.write(text)`, `f.writelines(list)`, `f.seek(position)`, `f.close()`.
     File contents are kept in memory in a dictionary as long as the Interpreter object exists.
-    To make make them persistent, one can access them from dart by `interpreter.vfs[filename]`.
+    To make them persistent, you can access them from dart by `interpreter.vfs[filename]`.
 
   Some more features might be added soon, but this will never become a full python interpreter.
 
 - Missing python features:
-  - `int` limited to dart int: &plusmn;1<<63 native ; &plusmn;1<<53 in web
   - `dict.key()`, `dict.values()`, `dict.items()` return list copies, not dynamic views as in Python
   - set operators `| & - ^ <= >=` (but available as set1.union(set2)` etc.)
+  - ternary conditional expressions
   - `:=`operator
   - `import`
   - slice assignments (like `x[5:10] = [1,2,3])`)
