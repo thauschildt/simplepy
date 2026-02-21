@@ -1,3 +1,6 @@
+## 1.3.3
+- added missing type annotation
+
 ## 1.3.2
 - added file IO (using virtual file system, only text files)
 - use BigInt instead of int, so that integers are not limited to 2^63 any more

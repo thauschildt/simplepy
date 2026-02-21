@@ -208,7 +208,7 @@ class PyFile {
     _position = position.clamp(0, _content.length);
   }
 
-  void close(vfs) {
+  void close(Map<String, String> vfs) {
     vfs[name] = _content.toString();
     isClosed = true;
   }
