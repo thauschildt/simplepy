@@ -1,7 +1,17 @@
 import 'package:test/test.dart';
+import 'package:test/test.dart' as testpkg;
 import 'package:simplepy/src/lexer.dart';
 import 'package:simplepy/src/parser.dart';
 import 'package:simplepy/src/ast_nodes.dart';
+
+final _origExpect = testpkg.expect;
+void expect(dynamic actual, dynamic expected, {dynamic matcher, dynamic reason}) {
+  matcher ??= expected;
+  if (matcher is int && actual is! int) {
+    matcher = BigInt.from(matcher);
+  }
+  _origExpect(actual, matcher, reason: reason);
+}
 
 // Helper function to parse and print AST
 String parseAndPrint(String source) {

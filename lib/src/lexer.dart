@@ -672,7 +672,7 @@ class Lexer {
       if (isFloat) {
         literalValue = double.parse(numberString);
       } else {
-        literalValue = int.parse(numberString);
+        literalValue = BigInt.parse(numberString);
       }
     } catch (e) {
       String formatType = isFloat ? "floating-point" : "integer";
@@ -739,7 +739,7 @@ class Lexer {
 
     try {
       // Parse the digits using the determined radix
-      int value = int.parse(digits, radix: radix);
+      var value = BigInt.parse(digits, radix: radix);
       addToken(TokenType.NUMBER, value);
     } catch (e) {
       // This catch might be redundant if digit checks are robust, but acts as a safeguard.

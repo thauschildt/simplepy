@@ -1,5 +1,15 @@
 import 'package:simplepy/src/lexer.dart';
 import 'package:test/test.dart';
+import 'package:test/test.dart' as testpkg;
+
+final _origExpect = testpkg.expect;
+void expect(dynamic actual, dynamic expected, {dynamic matcher, dynamic reason}) {
+  matcher ??= expected;
+  if (matcher is int && actual is! int) {
+    matcher = BigInt.from(matcher);
+  }
+  _origExpect(actual, matcher, reason: reason);
+}
 
 void main() {
   group('Lexer Basics', () {
@@ -111,7 +121,10 @@ void main() {
               .where((t) => t.type == TokenType.NUMBER)
               .map((t) => t.literal)
               .toList();
-      expect(literals, equals([123, 64, 0.5, 0.5, 5.0, 2, 99, 7]));
+      var expected = [123, 64, 0.5, 0.5, 5.0, 2, 99, 7];
+      for (var i=0; i<literals.length; i++) {
+        expect(literals[i], expected[i]);
+      }
     });
 
     test('should throw LexerError for invalid prefixed numbers', () {

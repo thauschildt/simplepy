@@ -185,7 +185,7 @@ class PyFile {
 
   void seek(int position) {
     if (isClosed) throw Exception("ValueError: I/O operation on closed file.");
-    if (position<0) throw Exception("ValueError: negative seek position $position");
+    if (position.isNegative) throw Exception("ValueError: negative seek position $position");
     _position = position.clamp(0, _content.length);
   }
 
@@ -986,7 +986,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   static String getTypeString(Object? obj) {
     if (obj == null) return 'NoneType';
     if (obj is bool) return 'bool';
-    if (obj is int) return 'int';
+    if (obj is BigInt) return 'int';
     if (obj is double) return 'float';
     if (obj is String) return 'str';
     if (obj is PyList) return 'list';
@@ -1057,7 +1057,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       );
     }
 
-    int start = 0, stop = 0, step = 1;
+    BigInt start = BigInt.zero, stop = BigInt.zero, step = BigInt.one;
 
     if (positionalArgs.isEmpty || positionalArgs.length > 3) {
       throw RuntimeError(
@@ -1078,7 +1078,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         start = _expectInt(positionalArgs[0], 'range()');
         stop = _expectInt(positionalArgs[1], 'range()');
         step = _expectInt(positionalArgs[2], 'range()');
-        if (step == 0) {
+        if (step == BigInt.zero) {
           throw RuntimeError(
             Token(TokenType.RANGE, 'range', null, 0, 0),
             "range() step cannot be zero.",
@@ -1093,14 +1093,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
 
     // Generate the list (handle step direction)
-    List<int> result = [];
-    if (step > 0) {
-      for (int i = start; i < stop; i += step) {
+    List<BigInt> result = [];
+    if (step > BigInt.zero) {
+      for (BigInt i = start; i < stop; i += step) {
         result.add(i);
       }
     } else {
       // step < 0
-      for (int i = start; i > stop; i += step) {
+      for (BigInt i = start; i > stop; i += step) {
         result.add(i);
       }
     }
@@ -1120,11 +1120,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       required: 1,
     );
     final arg = positionalArgs[0];
-    if (arg is String) return arg.length;
-    if (arg is PyList) return arg.list.length;
-    if (arg is PyTuple) return arg.tuple.length;
-    if (arg is Map) return arg.length;
-    if (arg is Set) return arg.length;
+    int? result;
+    if (arg is String) result = arg.length;
+    if (arg is PyList) result = arg.list.length;
+    if (arg is PyTuple) result = arg.tuple.length;
+    if (arg is Map) result = arg.length;
+    if (arg is Set) result = arg.length;
+    if (result is int) return BigInt.from(result);
 
     throw RuntimeError(
       builtInToken('len'),
@@ -1159,6 +1161,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       final baseArg = positionalArgs[1];
       if (baseArg is int) {
         base = baseArg;
+      } else if (baseArg is BigInt) {
+        base = baseArg.toInt();
       } else {
         throw RuntimeError(
           builtInToken('int'),
@@ -1179,9 +1183,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       }
     }
 
-    if (value is int && base == 10) return value; // Common case optimization
+    if (value is BigInt && base == 10) return value; // Common case optimization
     if (value is double && base == 10) return value.truncate();
-    if (value is bool && base == 10) return value ? 1 : 0;
+    if (value is bool && base == 10) return BigInt.from(value ? 1 : 0);
 
     if (value is String) {
       String strValue = value.trim();
@@ -1253,7 +1257,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     final value = positionalArgs[0];
 
     if (value is double) return value;
-    if (value is int) return value.toDouble();
+    if (value is BigInt) return value.toDouble();
     if (value is bool) return value ? 1.0 : 0.0;
     if (value is String) {
       String strValue = value.trim().toLowerCase();
@@ -1306,7 +1310,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   ) {
     _checkNumArgs('abs', positionalArgs, keywordArgs, required: 1);
     final arg = positionalArgs[0];
-    if (arg is int) return arg.abs();
+    if (arg is BigInt) return arg.abs();
     if (arg is double) return arg.abs();
     if (arg is bool) return arg ? 1 : 0; // abs(True)==1, abs(False)==0
     throw RuntimeError(
@@ -1534,8 +1538,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       if (ndigitsArg == null) {
         // round(x, None) -> behaves like ndigits=0 but returns int
         ndigits = 0; // Will return int later
-      } else if (ndigitsArg is int) {
-        ndigits = ndigitsArg;
+      } else if (ndigitsArg is BigInt) {
+        ndigits = ndigitsArg.toInt();
       } else if (ndigitsArg is bool) {
         // Python allows bools here too
         ndigits = ndigitsArg ? 1 : 0;
@@ -1550,6 +1554,8 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     num number; // Use num to handle int/double input
     if (numberArg is num) {
       number = numberArg;
+    } else if (numberArg is BigInt) {
+      number = numberArg.toDouble();
     } else if (numberArg is bool) {
       number = numberArg ? 1 : 0;
     } else {
@@ -1748,7 +1754,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? start =
         (positionalArgs.length > 1)
             ? positionalArgs[1]
-            : 0; // Default start is 0
+            : BigInt.zero; // Default start is 0
 
     Iterable<Object?>? valuesToSum;
     if (iterable is PyList) {
@@ -2048,10 +2054,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   // Helper to ensure an argument is an integer for built-ins.
-  static int _expectInt(Object? arg, String funcName) {
-    if (arg is int) return arg;
+  static BigInt _expectInt(Object? arg, String funcName) {
+    if (arg is BigInt) return arg;
     // Python often converts floats to ints here, but let's be stricter
-    if (arg is double && arg == arg.truncateToDouble()) return arg.toInt();
+    if (arg is double && arg == arg.truncateToDouble()) return BigInt.from(arg);
     throw "'$funcName' argument must be an integer (got ${arg?.runtimeType ?? 'None'}).";
   }
 
@@ -2428,6 +2434,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     return value;
   }
 
+  bool isNum(dynamic arg) {
+    return arg is num || arg is BigInt;
+  }
+  bool isInt(dynamic arg) {
+    return arg is int || arg is BigInt;
+  }
+  int toInt(dynamic arg, Token token) {
+    if (arg is int) return arg;
+    if (arg is BigInt) return arg.toInt();
+    pyThrow("RuntimeError", token, "Expected int, got $arg");
+    return 0;
+  }
+
   /// Visitor method for evaluating an [AugAssignExpr] (e.g., `+=`, `*=`).
   /// Evaluates the target (variable or index/key) to get the current value,
   /// evaluates the right-hand side value, performs the operation,
@@ -2501,7 +2520,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? right,
   ) {
     void checkNumbers(String op) {
-      if (left is! num || right is! num) {
+      if (!isNum(left) || !isNum(right)) {
         throw RuntimeError(
           operator,
           "Unsupported operand type(s) for $op: '${left?.runtimeType}' and '${right?.runtimeType}'",
@@ -2510,7 +2529,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
 
     void checkInts(String op) {
-      if (left is! int || right is! int) {
+      if (!isInt(left) || isInt(right)) {
         throw RuntimeError(
           operator,
           "Unsupported operand type(s) for $op: '${left?.runtimeType}' and '${right?.runtimeType}'. Operands must be integers.",
@@ -2521,11 +2540,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     switch (operator.type) {
       case TokenType.STAR_EQUAL:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is PyList) && right is int) {
-          return _multiplySequence(left!, right, operator);
+        if (left is BigInt && right is BigInt) return left * right;
+        if (left is BigInt && right is double) return left.toDouble() * right;
+        if (left is double && right is BigInt) return left * right.toDouble();
+        
+        if ((left is String || left is PyList) && isInt(right)) {
+          return _multiplySequence(left!, toInt(right, operator), operator);
         }
-        if (left is int && (right is String || right is List)) {
-          return _multiplySequence(right!, left, operator);
+        if (isInt(left) && (right is String || right is List)) {
+          return _multiplySequence(right!, toInt(left, operator), operator);
         }
         throw RuntimeError(
           operator,
@@ -2533,9 +2556,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         );
       case TokenType.STAR_STAR_EQUAL:
         checkNumbers("**=");
-        return pow(left as num, right as num);
+        if (left is num && right is num) return pow(left, right);
+        if (left is BigInt && right is BigInt) return left.pow(right.toInt());
+        if (left is BigInt && right is double) return pow(left.toDouble(), right);
+        if (left is double && right is BigInt) return pow(left, right.toDouble());
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for **=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
       case TokenType.PLUS_EQUAL:
         if (left is num && right is num) return left + right;
+        if (left is BigInt && right is BigInt) return left + right;
+        if (left is BigInt && right is double) return left.toDouble() + right;
+        if (left is double && right is BigInt) return left + right.toDouble();
+        
         if (left is String && right is String) return left + right;
         if (left is List && right is List) return [...left, ...right];
         throw RuntimeError(
@@ -2544,7 +2578,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         );
       case TokenType.MINUS_EQUAL:
         checkNumbers("-=");
-        return (left as num) - (right as num);
+        if (left is num && right is num) return left - right;
+        if (left is BigInt && right is BigInt) return left - right;
+        if (left is BigInt && right is double) return left.toDouble() - right;
+        if (left is double && right is BigInt) return left - right.toDouble();
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for -=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
       case TokenType.SLASH_EQUAL:
         checkNumbers("/=");
         if (right == 0) {
@@ -2553,7 +2594,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             operator,
           ); // throw RuntimeError(operator, "ZeroDivisionError");
         }
-        return (left as num) / (right as num);
+        if (left is num && right is num) return left / right;
+        if (left is BigInt && right is BigInt) return left / right;
+        if (left is BigInt && right is double) return left.toDouble() / right;
+        if (left is double && right is BigInt) return left / right.toDouble();
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for /=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
       case TokenType.SLASH_SLASH_EQUAL:
         checkNumbers("//=");
         if (right == 0) {
@@ -2562,25 +2610,38 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             operator,
           ); // throw RuntimeError(operator, "ZeroDivisionError");
         }
-        return (left as num) ~/ (right as num);
+        if (left is num && right is num) return left ~/ right;
+        if (left is BigInt && right is BigInt) return left ~/ right;
+        if (left is BigInt && right is double) return left.toDouble() ~/ right;
+        if (left is double && right is BigInt) return left ~/ right.toDouble();
+        throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for //=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
       case TokenType.PERCENT_EQUAL:
         checkNumbers("%=");
+        if (!isNum(left) || !isNum(right)) {
+          throw RuntimeError(
+          operator,
+          "Unsupported operand type(s) for //=: '${left?.runtimeType}' and '${right?.runtimeType}'",
+        );
+        }
         return _pythonModulo(left as num, right as num, operator);
       case TokenType.AMPERSAND_EQUAL:
         checkInts("&=");
-        return (left as int) & (right as int);
+        return (left as BigInt) & (right as BigInt);
       case TokenType.PIPE_EQUAL:
         checkInts("|=");
-        return (left as int) | (right as int);
+        return (left as BigInt) | (right as BigInt);
       case TokenType.CARET_EQUAL:
         checkInts("^=");
-        return (left as int) ^ (right as int);
+        return (left as BigInt) ^ (right as BigInt);
       case TokenType.LEFT_SHIFT_EQUAL:
         checkInts("<<=");
-        return (left as int) << (right as int);
+        return (left as BigInt) << (right as BigInt).toInt();
       case TokenType.RIGHT_SHIFT_EQUAL:
         checkInts(">>=");
-        return (left as int) >> (right as int);
+        return (left as BigInt) >> (right as BigInt).toInt();
       default:
         throw RuntimeError(
           operator,
@@ -2596,10 +2657,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Token bracket,
   ) {
     if (object is PyList) {
-      if (keyOrIndex is! int) {
+      if (!isInt(keyOrIndex)) {
         throw RuntimeError(bracket, "List indices must be integers.");
       }
-      int index = keyOrIndex;
+      int index = toInt(keyOrIndex, bracket);
       List l = object.list;
       if (index < 0) index += l.length;
       if (index < 0 || index >= l.length) {
@@ -2627,10 +2688,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Token bracket,
   ) {
     if (object is PyList) {
-      if (keyOrIndex is! int) {
+      if (!isInt(keyOrIndex)) {
         throw RuntimeError(bracket, "List indices must be integers.");
       }
-      int index = keyOrIndex;
+      int index = toInt(keyOrIndex, bracket);
       List l = object.list;
       if (index < 0) index += l.length;
       if (index < 0 || index >= l.length) {
@@ -2666,19 +2727,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case TokenType.NOT:
         return !isTruthy(operand);
       case TokenType.MINUS:
-        if (operand is num) return -operand;
+        if (isNum(operand)) return operand is num? -operand : -(operand as BigInt);
         throw RuntimeError(
           expr.operator,
           "Operand for unary '-' must be a number (got ${operand?.runtimeType}).",
         );
       case TokenType.PLUS:
-        if (operand is num) return operand;
+        if (isNum(operand)) return operand;
         throw RuntimeError(
           expr.operator,
           "Operand for unary '+' must be a number (got ${operand?.runtimeType}).",
         );
       case TokenType.TILDE:
-        if (operand is int) return -(operand + 1);
+        if (isInt(operand)) return ~(operand as BigInt); // - (operand + 1) should be the same
         // Python allows ~ on bool (True -> -2, False -> -1), but not on float
         if (operand is bool) {
           return operand ? -(1 + 1) : -(0 + 1); // results in -2 and -1
@@ -2699,7 +2760,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Centralized logic for evaluating binary operations.
   Object? _evaluateBinary(Token operator, Object? left, Object? right) {
     void checkNumbers() {
-      if (left is! num || right is! num) {
+      if (!isNum(left) || !isNum(right)) {
         throw RuntimeError(
           operator,
           "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'",
@@ -2708,7 +2769,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
 
     void checkInts() {
-      if (left is! int || right is! int) {
+      if (!isInt(left) || !isInt(right)) {
         throw RuntimeError(
           operator,
           "TypeError: unsupported operand type(s) for ${operator.lexeme}: '${getTypeString(left)}' and '${getTypeString(right)}'. Must be integers.",
@@ -2717,7 +2778,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
 
     void checkComparable() {
-      if (!((left is num && right is num) ||
+      if (!((isNum(left) && isNum(right)) ||
           (left is String && right is String))) {
         throw RuntimeError(
           operator,
@@ -2729,9 +2790,20 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     switch (operator.type) {
       case TokenType.MINUS:
         checkNumbers();
-        return (left as num) - (right as num);
+        if (left is num && right is num) return left - right;
+        if (left is BigInt && right is BigInt) return left - right;
+        if (left is BigInt && right is double) return left.toDouble() - right;
+        if (left is double && right is BigInt) return left - right.toDouble();
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for -: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       case TokenType.PLUS:
         if (left is num && right is num) return left + right;
+        if (left is BigInt && right is BigInt) return left + right;
+        if (left is BigInt && right is double) return left.toDouble() + right;
+        if (left is double && right is BigInt) return left + right.toDouble();
+
         if (left is String && right is String) return left + right;
         if (left is PyList && right is PyList) {
           return PyList([...left.list, ...right.list]);
@@ -2749,7 +2821,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           pyThrow("ZeroDivisionError", operator, "float division by zero");
           //throw RuntimeError(operator,"ZeroDivisionError: float division by zero",);
         }
-        return (left as num).toDouble() / (right as num).toDouble();
+        if (left is num && right is num) return left / right;
+        if (left is BigInt && right is BigInt) return left / right;
+        if (left is BigInt && right is double) return left.toDouble() / right;
+        if (left is double && right is BigInt) return left / right.toDouble();
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for //: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       case TokenType.SLASH_SLASH:
         checkNumbers();
         if (_isZero(right)) {
@@ -2760,14 +2839,27 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           );
           //throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero",);
         }
-        return (left as num) ~/ (right as num);
+
+        if (left is num && right is num) return left ~/ right;
+        if (left is BigInt && right is BigInt) return left ~/ right;
+        if (left is BigInt && right is double) return left.toDouble() ~/ right;
+        if (left is double && right is BigInt) return left ~/ right.toDouble();
+
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for //: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       case TokenType.STAR:
         if (left is num && right is num) return left * right;
-        if ((left is String || left is PyList) && right is int) {
-          return _multiplySequence(left!, right, operator);
+        if (left is BigInt && right is BigInt) return left * right;
+        if (left is BigInt && right is double) return left.toDouble() * right;
+        if (left is double && right is BigInt) return left * right.toDouble();
+
+        if ((left is String || left is PyList) && isInt(right)) {
+          return _multiplySequence(left!, toInt(right, operator), operator);
         }
-        if (left is int && (right is String || right is List)) {
-          return _multiplySequence(right!, left, operator);
+        if (isInt(left) && (right is String || right is List)) {
+          return _multiplySequence(right!, toInt(left, operator), operator);
         }
         throw RuntimeError(
           operator,
@@ -2775,10 +2867,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         );
       case TokenType.STAR_STAR:
         checkNumbers();
-        return pow(
-          left as num,
-          right as num,
-        ); // Might need try-catch for domain errors
+        if (left is num && right is num) return pow(left, right);
+        if (left is BigInt && right is BigInt) return left.pow(right.toInt());
+        if (left is BigInt && right is double) return pow(left.toDouble(), right);
+        if (left is double && right is BigInt) return pow(left, right.toDouble());
+        throw RuntimeError(
+          operator,
+          "TypeError: unsupported operand type(s) for **: '${getTypeString(left)}' and '${getTypeString(right)}'",
+        );
       case TokenType.PERCENT:
         checkNumbers();
         if (_isZero(right)) {
@@ -2791,7 +2887,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
             //throw RuntimeError(operator,"ZeroDivisionError: integer division or modulo by zero",);
           }
         }
-        return _pythonModulo(left as num, right as num, operator);
+        return _pythonModulo(left, right, operator);
       case TokenType.GREATER:
         checkComparable();
         return _compare(left, right, operator) > 0;
@@ -2811,19 +2907,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
       case TokenType.AMPERSAND:
         checkInts();
-        return (left as int) & (right as int);
+        return (left as BigInt) & (right as BigInt);
       case TokenType.PIPE:
         checkInts();
-        return (left as int) | (right as int);
+        return (left as BigInt) | (right as BigInt);
       case TokenType.CARET:
         checkInts();
-        return (left as int) ^ (right as int);
+        return (left as BigInt) ^ (right as BigInt);
       case TokenType.LEFT_SHIFT:
         checkInts();
-        return (left as int) << (right as int);
+        return (left as BigInt) << ((right as BigInt).toInt());
       case TokenType.RIGHT_SHIFT:
         checkInts();
-        return (left as int) >> (right as int);
+        return (left as BigInt) >> ((right as BigInt).toInt());
 
       case TokenType.IN:
         if (right is PyList ||
@@ -2881,7 +2977,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   bool _isZero(Object? obj) {
-    return (obj is num) && obj == 0;
+    if (obj is num) return obj == 0;
+    if (obj is BigInt) return obj==BigInt.zero;
+    return false;
   }
 
   /// Visitor method for evaluating a [BinaryExpr] (arithmetic, comparison, bitwise).
@@ -2895,6 +2993,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Helper for comparisons, handling numbers and strings. Throws error for incompatible types.
   int _compare(Object? left, Object? right, Token operator) {
     if (left is num && right is num) return left.compareTo(right);
+    if (left is BigInt && right is BigInt) return left.compareTo(right);
+    if (left is BigInt && right is double) return left.toDouble().compareTo(right);
+    if (left is double && right is BigInt) return left.compareTo(right.toDouble());
     if (left is String && right is String) return left.compareTo(right);
     // Python cannot compare different types (except for numbers)
     throw RuntimeError(
@@ -2904,18 +3005,24 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Helper for Python's specific modulo behavior (result has same sign as divisor).
-  num _pythonModulo(num a, num b, Token token) {
+  dynamic _pythonModulo(dynamic a, dynamic b, Token token) {
     if (b == 0) {
       pyThrow(
         "ZeroDivisionError",
         token,
-        a is int && b is int
+        isInt(a) && isInt(b)
             ? "ZeroDivisionError: integer modulo by zero"
             : "ZeroDivisionError: float modulo",
       );
     }
     var result = a % b;
-    if (result >= 0 != b >= 0) result += b;
+    if (result is BigInt) {
+      if (result >= BigInt.zero != (b as BigInt)>=BigInt.zero) {
+        result += b;
+      }
+    } else if (result >= 0 != b >= 0) { // double
+      result += b;
+    }
     return result;
   }
 
@@ -2946,7 +3053,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (callee is! PyCallable) {
       throw RuntimeError(
         expr.paren,
-        "Object of type '${callee?.runtimeType ?? 'None'}' is not callable.",
+        "Object of type '${getTypeString(callee?? 'None')}' is not callable.",
       );
     }
     PyCallable function = callee;
@@ -3020,13 +3127,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         l = (object as PyTuple).tuple;
         typename = "Tuple";
       }
-      if (key is! int) {
+      if (!isInt(key)) {
         throw RuntimeError(
           expr.bracket,
           "$typename indices must be integers (got ${key?.runtimeType}).",
         );
       }
-      int index = key;
+      int index = toInt(key, expr.bracket);
       // Handle negative indices
       if (index < 0) index += l.length;
 
@@ -3038,14 +3145,13 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     // String indexing/slicing
     if (object is String) {
-      if (key is! int) {
-        // TODO: Implement string slicing if needed
+      if (!isInt(key)) {
         throw RuntimeError(
           expr.bracket,
           "String indices must be integers (got ${key?.runtimeType}).",
         );
       }
-      int index = key;
+      int index = toInt(key, expr.bracket);
       // Handle negative indices
       if (index < 0) index += object.length;
 
@@ -3081,10 +3187,10 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     Object? valueToSet = evaluate(expr.value);
 
     if (targetObject is PyList) {
-      if (indexOrKey is! int) {
+      if (!isInt(indexOrKey)) {
         throw RuntimeError(expr.bracket, "List indices must be integers.");
       }
-      int index = indexOrKey;
+      int index = toInt(indexOrKey, expr.bracket);
       List target = targetObject.list;
       if (index < 0) {
         index += target.length;
@@ -3249,11 +3355,11 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     switch (type) {
       case 'd': // Integer
         if (align == '') align = '>';
-        if (value is bool) value = value ? 1 : 0; // Handle bools as ints
-        if (value is! int) {
+        if (value is bool) value = BigInt.from(value ? 1 : 0); // Handle bools as ints
+        if (!isInt(value)) {
           // Try converting floats if they are whole numbers
           if (value is double && value.truncateToDouble() == value) {
-            value = value.toInt();
+            value = BigInt.from(value);
           } else {
             throw FormatException(
               "Cannot format value of type '${getTypeString(value)}' with 'd'",
@@ -3262,9 +3368,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         }
         formattedValue = value.toString();
         // Handle sign for integer
-        if (value >= 0 && sign == '+') {
+        if (value as BigInt >= BigInt.zero && sign == '+') {
           formattedValue = "+$formattedValue";
-        } else if (value >= 0 && sign == ' ') {
+        } else if (value >= BigInt.zero && sign == ' ') {
           formattedValue = " $formattedValue";
         }
         // Negative sign is handled by toString()
@@ -3272,12 +3378,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       case 'f': // Float (fixed point)
         if (align == '') align = '>';
         if (value is bool) value = value ? 1.0 : 0.0;
-        if (value is! num) {
+        if (!isNum(value)) {
           throw FormatException(
             "Cannot format value of type '${getTypeString(value)}' with 'f'",
           );
         }
-        double numValue = (value is int) ? value.toDouble() : value as double;
+        double numValue = isInt(value) ? (value as BigInt).toDouble() : value as double;
         formattedValue = numValue.toStringAsFixed(precision);
         // Handle sign for float
         if (numValue >= 0 && sign == '+') {
@@ -3287,7 +3393,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
         }
         // Negative sign is handled by toStringAsFixed()
         break;
-      // TODO: Add more types: 's' (string), 'e' (exponent), 'g' (general), '%' (percentage), 'b' (binary), 'o' (octal), 'x'/'X' (hex)
+      // TODO: Add more types: 'e' (exponent), 'g' (general), '%' (percentage), 'b' (binary), 'o' (octal), 'x'/'X' (hex)
       case 's': // String (default)
       default:
         if (align == '') align = '<';
@@ -3386,12 +3492,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       // --- Python bool/int equivalence check ---
       bool skipAdd = false;
       if (element == true) {
-        if (elements.contains(1)) skipAdd = true;
-      } else if (element == 1) {
+        if (elements.contains(BigInt.one)) skipAdd = true;
+      } else if (element == BigInt.one) {
         if (elements.contains(true)) skipAdd = true;
       } else if (element == false) {
-        if (elements.contains(0)) skipAdd = true;
-      } else if (element == 0) {
+        if (elements.contains(BigInt.zero)) skipAdd = true;
+      } else if (element == BigInt.zero) {
         if (elements.contains(false)) skipAdd = true;
       }
       if (!skipAdd) {
@@ -3405,7 +3511,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Mimics Python's rules (numbers, strings, booleans, None are hashable; lists, dicts are not).
   static bool isHashable(Object? key) {
     if (key == null) return true; // None is hashable
-    if (key is num ||
+    if (key is num || key is BigInt ||
         key is String ||
         key is bool ||
         key is PyCallable ||
@@ -3563,6 +3669,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (object == null) return false; // None is falsey
     if (object is bool) return object; // Booleans are themselves
     if (object is num) return object != 0; // Zero is falsey, others are truthy
+    if (object is BigInt) return object != BigInt.zero; // Zero is falsey, others are truthy
     if (object is String) return object.isNotEmpty; // Empty string is falsey
     if (object is PyList) return object.list.isNotEmpty; // Empty list is falsey
     if (object is Map) return object.isNotEmpty; // Empty map is falsey
@@ -3659,11 +3766,18 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     // including comparing int and double (e.g., 1 == 1.0).
     // We place this check *after* container checks to ensure deep comparison
     // for containers isn't skipped.
-    if ((a is num && b is num) ||
+    if (((a is num) && (b is num)) ||
+        (a is BigInt && b is BigInt) ||
         (a is bool && b is bool) ||
         (a is String && b is String)) {
       return a == b;
     }
+    if (a is num && b is bool) return a==(b?1:0);
+    if (b is num && a is bool) return b==(a?1:0);
+    if (a is BigInt && (b is num)) return a == BigInt.from(b);
+    if (a is BigInt && (b is bool)) return a == BigInt.from(b? 1:0);
+    if (b is BigInt && (a is num)) return b == BigInt.from(a);
+    if (b is BigInt && (a is bool)) return b == BigInt.from(a? 1:0);
     // --- Other Types (Callables, Classes, Instances) ---
     // Default Python behavior is identity comparison unless __eq__ is implemented.
     if (a is PyCallable && b is PyCallable) return identical(a, b);
@@ -3901,28 +4015,28 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
 
     if (expr.start != null) {
       Object? startObj = expr.start!.accept(this);
-      if (startObj is! int) {
+      if (!isInt(startObj)) {
         throw RuntimeError(expr.bracket, "Slice start must be an integer.");
       }
-      start = startObj;
+      start = toInt(startObj, expr.bracket);
     }
 
     if (expr.stop != null) {
       Object? stopObj = expr.stop!.accept(this);
-      if (stopObj is! int) {
+      if (!isInt(stopObj)) {
         throw RuntimeError(expr.bracket, "Slice stop must be an integer.");
       }
-      stop = stopObj;
+      stop = toInt(stopObj, expr.bracket);
     } else {
       stop = list.length;
     }
 
     if (expr.step != null) {
       Object? stepObj = expr.step!.accept(this);
-      if (stepObj is! int) {
+      if (!isInt(stepObj)) {
         throw RuntimeError(expr.bracket, "Slice step must be an integer.");
       }
-      step = stepObj;
+      step = toInt(stepObj, expr.bracket);
     }
 
     // Handle negative indices

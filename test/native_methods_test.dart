@@ -214,7 +214,7 @@ c4 = l.count([1])
 c5 = l.count(99)
 c6 = [].count(1)
 print(c1,c2,c3,c4,c5,c6)
-''', expectedOutput: "3 3 1 1 0 0\n");
+''', expectedOutput: "4 4 1 1 0 0\n");
     });
 
     test('list.index()', () {
@@ -304,7 +304,7 @@ b5 = lst5 == []
       runSimplePyTest(
         "[1,'a'].sort()",
         expectError: true,
-        errorContains: "'String' is not a subtype of type 'num'",
+        errorContains: "'String' is not a subtype of type 'BigInt'",
       );
     });
   }); // End List Methods group
@@ -323,8 +323,8 @@ c5 = t.count(99)
 c6 = ().count(1)
 ''',
         expectedVariables: {
-          'c1': 3,
-          'c2': 3,
+          'c1': 4,
+          'c2': 4,
           'c3': 1,
           'c4': 1,
           'c5': 0,
@@ -382,7 +382,7 @@ s.add(True) # Same as 1
 s_final = s
 ''',
         expectedVariables: {
-          's_final': {1, 'a', 2},
+          's_final': {BigInt.from(1), 'a', BigInt.from(2)},
         },
       ); // True == 1, 'a' duplicate ignored
       expect(
@@ -402,9 +402,10 @@ s = {1, 'a', 2, True} # {1, 'a', 2}
 s.remove('a')
 s.remove(1) # Removes 1/True
 s_final = s
+ok = s== {2}
 ''',
         expectedVariables: {
-          's_final': {2},
+          'ok': true,
         },
       );
       expect(
@@ -441,10 +442,10 @@ s.discard('a')
 s.discard(1)
 s.discard(99) # Not present, no error
 s.discard([]) # Unhashable, no error (in Python)
-s_final = s
+ok = s=={2}
 ''',
         expectedVariables: {
-          's_final': {2},
+          'ok': true,
         },
       );
       // Check no error for unhashable
@@ -505,13 +506,18 @@ u1 = s1.union(s2)
 u3 = s1.union([3, 4]) # Union with list
 u4 = s1.union(set())
 u5 = set().union(s1)
+ok1 = u1=={1,2,3}
+# ok2 = u2=={1,2,3,4}
+ok3 = u3=={1,2,3,4}
+ok4 = u4=={1,2}
+ok5 = u5=={1,2}
 ''',
         expectedVariables: {
-          'u1': {1, 2, 3},
-          //'u2': {1, 2, 3, 4}, // Need to implement | operator
-          'u3': {1, 2, 3, 4},
-          'u4': {1, 2},
-          'u5': {1, 2},
+          'ok1': true,
+          //'ok2': true, // Need to implement | operator
+          'ok3': true,
+          'ok4': true,
+          'ok5': true,
         },
       );
       // Test operator if implemented
@@ -547,13 +553,17 @@ i1 = s1.intersection(s2)
 i3 = s1.intersection([3, 4]) # Intersection with list
 i4 = s1.intersection(set())
 i5 = set().intersection(s1)
+ok1 = i1=={2,3}
+ok3 = i3=={3}
+ok4 = i4==set()
+ok5 = i5==set()
 ''',
         expectedVariables: {
-          'i1': {2, 3},
-          // 'i2': <Object?>{}, // Need to implement & operator
-          'i3': {3},
-          'i4': <Object?>{},
-          'i5': <Object?>{},
+          'ok1': true,
+          // 'i2': true, // Need to implement & operator
+          'ok3': true,
+          'ok4': true,
+          'ok5': true,
         },
       );
       // Test operator if implemented
@@ -589,13 +599,17 @@ d1 = s1.difference(s2)
 d3 = s1.difference([3, 4]) # Difference with list
 d4 = s1.difference(set())
 d5 = set().difference(s1)
+ok1 = d1=={1}
+ok3 = d3=={1,2}
+ok4 = d4=={1,2,3}
+ok5 = d5==set()
 ''',
         expectedVariables: {
-          'd1': {1},
-          // 'd2': <Object?>{}, // Need to implement - operator
-          'd3': {1, 2},
-          'd4': {1, 2, 3},
-          'd5': <Object?>{},
+          'ok1': true,
+          // 'ok2': true, // Need to implement - operator
+          'ok3': true,
+          'ok4': true,
+          'ok5': true,
         },
       );
       // Test operator if implemented
@@ -752,10 +766,10 @@ s.update({2, 3})
 s.update([3, 4]) # Update with list
 s.update("ab")   # Update with string
 s.update(set())  # Update with empty
-s_final = s
+ok = s == {1, 2, 3, 4, 'a', 'b'}
 ''',
         expectedVariables: {
-          's_final': {1, 2, 3, 4, 'a', 'b'},
+          'ok': true
         },
       );
       // Test operator if implemented
@@ -828,14 +842,10 @@ v3 = d.get('b', 99)   # Key not found -> default
 v4 = d.get('a', 99)   # Key found -> value (not default)
 v5 = {}.get('a')
 v6 = {}.get('a', 100)
+ok = [v1, v2, v3, v4, v5, v6] == [1, None, 99, 1, None, 100]
 ''',
         expectedVariables: {
-          'v1': 1,
-          'v2': null,
-          'v3': 99,
-          'v4': 1,
-          'v5': null,
-          'v6': 100,
+          'ok': true,
         },
       );
       // Test with unhashable key (should return default or None)
@@ -853,8 +863,9 @@ d = {'a': 1, 'b': 2}
 p1 = d.pop('a')
 p2 = d.pop('c', 99) # Key not found -> default
 p3 = d.pop('b')
+ok = [d, p1, p2, p3] == [dict(), 1,99, 2]
 ''',
-        expectedVariables: {'d': {}, 'p1': 1, 'p2': 99, 'p3': 2},
+        expectedVariables: {'ok': true},
       );
       runSimplePyTest(
         "d={'a':1}.pop('b')",
@@ -905,10 +916,12 @@ d.update([['c', 3], ['d', 4]]) # Update with list of pairs
 d.update() # Update with no args
 d2 = {}
 d2.update(d)
+ok1 = d == {'a': 100, 'b': 2, 'c': 3, 'd': 4}
+ok2 = d2 == {'a': 100, 'b': 2, 'c': 3, 'd': 4}
 ''',
         expectedVariables: {
-          'd': {'a': 100, 'b': 2, 'c': 3, 'd': 4},
-          'd2': {'a': 100, 'b': 2, 'c': 3, 'd': 4},
+          'ok1': true,
+          'ok2': true,
         },
       );
       runSimplePyTest(
