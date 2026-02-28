@@ -1,4 +1,5 @@
 import 'interpreter.dart';
+import 'pynum.dart';
 
 // --- Top-Level Helper Functions (mit Interpreter-Parameter) ---
 
@@ -66,8 +67,7 @@ void checkNoKeywords(String funcName, Map<String, Object?> keywordArgs) {
 
 /// Helper to ensure an argument is an integer for built-ins.
 int expectInt(Object? arg, String contextDesc) {
-  if (arg is int) return arg;
-  if (arg is BigInt) return arg.toInt();
+  if (arg is PyNum && arg.isInt) return arg.intValue!.toInt();
   if (arg is double && arg == arg.truncateToDouble()) return arg.toInt();
   // Use Interpreter.getTypeString if needed for better error message (requires passing interpreter)
   // Or keep the simpler message:
@@ -92,17 +92,17 @@ final Map<String, PyCallableNativeImpl> listMethodImpls = {
 final Map<String, PyCallableNativeImpl> fileMethodImpls = {
   'read': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('read', posArgs, kwArgs, required: 0, maxOptional: 1);
-    int n = posArgs.isNotEmpty ? posArgs[0] as int : -1;
+    int n = posArgs.isNotEmpty ? expectInt(posArgs[0], "read") : -1;
     return (receiver as PyFile).read(n);
   },
   'readline': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('readline', posArgs, kwArgs, required: 0, maxOptional: 1);
-    int n = posArgs.isNotEmpty ? (posArgs[0] as BigInt).toInt() : -1;
+    int n = posArgs.isNotEmpty ? expectInt(posArgs[0], "readline") : -1;
     return (receiver as PyFile).readline(n);
   },
   'readlines': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('readlines', posArgs, kwArgs, required: 0, maxOptional: 1);
-    int n = posArgs.isNotEmpty ? (posArgs[0] as BigInt).toInt() : -1;
+    int n = posArgs.isNotEmpty ? expectInt(posArgs[0], "readlines") : -1;
     return (receiver as PyFile).readlines(n);
   },
   'write': (interpreter, receiver, posArgs, kwArgs) {
@@ -119,7 +119,7 @@ final Map<String, PyCallableNativeImpl> fileMethodImpls = {
   },
   'seek': (interpreter, receiver, posArgs, kwArgs) {
     checkNumArgs('close', posArgs, kwArgs, required: 1);
-    (receiver as PyFile).seek((posArgs[0] as BigInt).toInt());
+    (receiver as PyFile).seek(expectInt(posArgs[0], "seek"));
     return null;
   },
   'close': (interpreter, receiver, posArgs, kwArgs) {
@@ -1321,6 +1321,8 @@ Object? _tupleCount(
   return count;
 }
 
+bool isInt(arg) => arg is PyNum && arg.isInt;
+
 Object? _tupleIndex(
   Interpreter interpreter,
   Object receiver,
@@ -1342,10 +1344,10 @@ Object? _tupleIndex(
   int stop = tuple.length;
   // ... (parse start/stop, handle slice indices, loop and check with isEqual) ...
   try {
-    if (positionalArgs.length > 1 && positionalArgs[1] is! BigInt) {
+    if (positionalArgs.length > 1 && !isInt(positionalArgs[1])) {
       throw "TypeError: slice indices must be integers";
     }
-    if (positionalArgs.length > 2 && positionalArgs[2] is! BigInt) {
+    if (positionalArgs.length > 2 && !isInt(positionalArgs[2])) {
       throw "TypeError: slice indices must be integers";
     }
     if (positionalArgs.length > 1) {
@@ -1396,12 +1398,12 @@ Object? _setAdd(
   // --- Python bool/int equivalence check ---
   bool skipAdd = false;
   if (element == true) {
-    if (set.contains(BigInt.one)) skipAdd = true;
-  } else if (element == BigInt.one) {
+    if (set.contains(PyNum.int(1))) skipAdd = true;
+  } else if (element == PyNum.int(1)) {
     if (set.contains(true)) skipAdd = true;
   } else if (element == false) {
-    if (set.contains(BigInt.zero)) skipAdd = true;
-  } else if (element == BigInt.zero) {
+    if (set.contains(PyNum.int(0))) skipAdd = true;
+  } else if (element == PyNum.int(0)) {
     if (set.contains(false)) skipAdd = true;
   }
   if (!skipAdd) {
@@ -1428,12 +1430,12 @@ Object? _setRemove(
   }
   bool removed = set.remove(element);
 
-  if (element == BigInt.zero) removed = removed || set.remove(false);
-  if (element == BigInt.one) {
+  if (element == PyNum.int(0)) removed = removed || set.remove(false);
+  if (element == PyNum.int(1)) {
     removed = removed || set.remove(true);
   }
-  if (element == false) removed = removed || set.remove(BigInt.zero);
-  if (element == true) removed = removed || set.remove(BigInt.one);
+  if (element == false) removed = removed || set.remove(PyNum.int(0));
+  if (element == true) removed = removed || set.remove(PyNum.int(1));
   if (!removed) {
     throw RuntimeError(
       Interpreter.builtInToken('remove'),

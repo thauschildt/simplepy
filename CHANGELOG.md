@@ -1,3 +1,7 @@
+## 2.0.0
+- python integers and floats are represented by `PyNum` class
+- previous verions 1.3.2 and 1.3.2 were using BigInt, mistakenly without increasing the major version number despite breaking change
+
 ## 1.3.3
 - added missing type annotation
 

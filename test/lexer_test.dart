@@ -1,4 +1,5 @@
 import 'package:simplepy/src/lexer.dart';
+import 'package:simplepy/src/pynum.dart';
 import 'package:test/test.dart';
 import 'package:test/test.dart' as testpkg;
 
@@ -10,8 +11,11 @@ void expect(
   dynamic reason,
 }) {
   matcher ??= expected;
-  if (matcher is int && actual is! int) {
-    matcher = BigInt.from(matcher);
+  if (matcher is int && actual is PyNum) {
+    matcher = PyNum.int(matcher);
+  }
+  if (matcher is double && actual is PyNum) {
+    matcher = PyNum.double(matcher);
   }
   _origExpect(actual, matcher, reason: reason);
 }
@@ -365,7 +369,7 @@ print(x) # Another comment
         expect(tokens[0].lexeme, source, reason: "Source: $source");
         // Use closeTo for floating point comparisons due to potential precision differences
         expect(
-          tokens[0].literal,
+          (tokens[0].literal as PyNum).toDouble(),
           closeTo(expectedValue, 1e-9),
           reason: "Source: $source",
         );
@@ -407,7 +411,7 @@ print(x) # Another comment
         expect(tokens[0].type, TokenType.NUMBER, reason: "Source: $source");
         expect(tokens[0].lexeme, source, reason: "Source: $source");
         expect(
-          tokens[0].literal,
+          (tokens[0].literal as PyNum).toDouble(),
           closeTo(expectedValue, 1e-9),
           reason: "Source: $source",
         );

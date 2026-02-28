@@ -49,10 +49,14 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
 import 'package:simplepy/simplepy.dart';
 
 void main() {
-  String py = "print(3**4)";
+  String py = """
+print(3**4)
+6.0*7
+""";
   final tokens = Lexer(py).scanTokens();
   final stmts = Parser(tokens).parse();
-  Interpreter().interpret(stmts);
+  var result = Interpreter().interpret(stmts);
+  print("result = $result (${result.runtimeType})");
 }
 ```
 

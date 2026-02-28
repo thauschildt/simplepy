@@ -1,5 +1,7 @@
 // ignore_for_file: constant_identifier_names
 
+import 'pynum.dart';
+
 /// Enumerates all the possible types of [Token]s that the [Lexer] can recognize.
 ///
 /// This includes single and multi-character operators, literals (like numbers and strings),
@@ -670,9 +672,9 @@ class Lexer {
     try {
       // If it has '.', 'e', or started with '.', treat as float
       if (isFloat) {
-        literalValue = double.parse(numberString);
+        literalValue = PyNum.double(double.parse(numberString));
       } else {
-        literalValue = BigInt.parse(numberString);
+        literalValue = PyNum.bigInt(BigInt.parse(numberString));
       }
     } catch (e) {
       String formatType = isFloat ? "floating-point" : "integer";
@@ -739,7 +741,7 @@ class Lexer {
 
     try {
       // Parse the digits using the determined radix
-      var value = BigInt.parse(digits, radix: radix);
+      var value = PyNum.bigInt(BigInt.parse(digits, radix: radix));
       addToken(TokenType.NUMBER, value);
     } catch (e) {
       // This catch might be redundant if digit checks are robust, but acts as a safeguard.

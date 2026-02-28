@@ -4,6 +4,7 @@ import 'package:simplepy/src/lexer.dart';
 import 'package:simplepy/src/parser.dart';
 import 'package:simplepy/src/interpreter.dart';
 import 'package:simplepy/src/ast_nodes.dart';
+import 'package:simplepy/src/pynum.dart';
 
 final _origExpect = testpkg.expect;
 void expect(
@@ -14,7 +15,7 @@ void expect(
 }) {
   matcher ??= expected;
   if (matcher is int && actual is! int) {
-    matcher = BigInt.from(matcher);
+    matcher = PyNum.int(matcher);
   }
   _origExpect(actual, matcher, reason: reason);
 }

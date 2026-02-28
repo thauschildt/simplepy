@@ -304,7 +304,7 @@ b5 = lst5 == []
       runSimplePyTest(
         "[1,'a'].sort()",
         expectError: true,
-        errorContains: "'String' is not a subtype of type 'BigInt'",
+        errorContains: "'String' is not a subtype of type 'PyNum'",
       );
     });
   }); // End List Methods group
@@ -373,18 +373,13 @@ i5 = t_nested.index((1,2))
 
   group('Set Methods', () {
     test('set.add()', () {
-      runSimplePyTest(
-        '''
+      runSimplePyTest('''
 s = {1, 'a'}
 s.add(2)
 s.add('a') # Already exists
 s.add(True) # Same as 1
-s_final = s
-''',
-        expectedVariables: {
-          's_final': {BigInt.from(1), 'a', BigInt.from(2)},
-        },
-      ); // True == 1, 'a' duplicate ignored
+print(s)
+''', expectedOutput: "{1, 'a', 2}\n"); // True == 1, 'a' duplicate ignored
       expect(
         runCode('s={1}\ns.add([])').error,
         isA<RuntimeError>().having(
