@@ -1321,7 +1321,7 @@ Object? _tupleCount(
   return count;
 }
 
-bool isInt(arg) => arg is PyNum && arg.isInt;
+bool isInt(dynamic arg) => arg is PyNum && arg.isInt;
 
 Object? _tupleIndex(
   Interpreter interpreter,
