@@ -400,4 +400,32 @@ finally:
       expect(parseAndPrint(source), equals(expectedAstString));
     });
   });
+
+  group('Parse import', () {
+    test('should parse simple import', () {
+      final source = 'import math';
+      final expectedAstString = '(import math)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+    test('should parse simple import with alias', () {
+      final source = 'import math as m';
+      final expectedAstString = '(import math as m)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+    test('should parse "import part1.part2"', () {
+      final source = 'import os.path';
+      final expectedAstString = '(import os.path)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+    test('should parse import with multiple modules', () {
+      final source = 'import os.path, random as r';
+      final expectedAstString = '(import os.path, random as r)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+    test('should parse from ... import with multiple names and alias', () {
+      final source = 'from math import sin as sinus, cos';
+      final expectedAstString = '(from math import sin as sinus, cos)';
+      expect(parseAndPrint(source), equals(expectedAstString));
+    });
+  });
 }

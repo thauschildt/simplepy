@@ -519,6 +519,12 @@ abstract class StmtVisitor<R> {
   /// Visits a [ContinueStmt] node (`continue` statement).
   R visitContinueStmt(ContinueStmt stmt);
 
+  /// Visits an [ImportStmt] node (`for` loop).
+  R visitImportStmt(ImportStmt stmt);
+
+  /// Visits an [ImportStmt] node (`for` loop).
+  R visitFromImportStmt(FromImportStmt stmt);
+
   /// Visits a [TryStmt] node (`try:`).
   R visitTryStmt(TryStmt stmt);
 
@@ -722,6 +728,39 @@ class ContinueStmt extends Stmt {
   ContinueStmt(this.token) : super(token);
   @override
   R accept<R>(StmtVisitor<R> visitor) => visitor.visitContinueStmt(this);
+}
+
+/// Represents an `import` statement, used to import python code from the virtual file system.
+class ImportStmt extends Stmt {
+  final List<ImportSpecifier> imports;
+  final Token token;
+  ImportStmt(this.imports, this.token): super(token);
+  @override
+  R accept<R>(StmtVisitor<R> visitor) => visitor.visitImportStmt(this);
+}
+
+/// List of module names to be imported
+class ImportSpecifier {
+  final List<String> modulePath; // e.g. ["math", "utils"]
+  final String? alias;
+  ImportSpecifier(this.modulePath, this.alias);
+}
+
+/// Represents a `from ... import ...` statement.
+class FromImportStmt extends Stmt {
+  final List<String> modulePath;
+  final List<ImportSelector> selectors;
+  final Token token;
+  FromImportStmt(this.modulePath, this.selectors, this.token): super(token);
+  @override
+  R accept<R>(StmtVisitor<R> visitor) => visitor.visitFromImportStmt(this);
+}
+
+/// List of names with optional aliases to be imported
+class ImportSelector {
+  final String name;
+  final String? alias;
+  ImportSelector(this.name, this.alias);
 }
 
 // TryStmt: Represents a try-except-else-finally block
@@ -979,6 +1018,27 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
     "for ${stmt.variable.lexeme} in ${printExpr(stmt.iterable)}",
     [stmt.body],
   );
+
+  @override
+  String visitImportStmt(ImportStmt stmt) {
+    var modules = stmt.imports.map((e) {
+      var path = e.modulePath.join(".");
+      var as = e.alias != null ? " as ${e.alias}" : "";
+      return "$path$as";
+    });
+    return parenthesize("import ${modules.join(", ")}", []);
+  }
+
+  @override
+  String visitFromImportStmt(FromImportStmt stmt) {
+    var selectors = stmt.selectors.map((e) {
+      var name=e.name;
+      var as = e.alias != null ? " as ${e.alias}" : "";
+      return "$name$as";
+    });
+    return parenthesize("from ${stmt.modulePath.join(".")} import ${selectors.join(", ")}", []);
+  }
+
 
   @override
   String visitUnaryExpr(UnaryExpr expr) {

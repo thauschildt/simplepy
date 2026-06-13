@@ -2439,6 +2439,19 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     throw _continueException;
   }
 
+  /// Visitor method for executing an [ImportStmt].
+  @override
+  void visitImportStmt(ImportStmt stmt) {
+    throw RuntimeError(stmt.token, "import ... has not yet been implemented.");
+  }
+
+
+  /// Visitor method for executing an [ImportStmt].
+  @override
+  void visitFromImportStmt(FromImportStmt stmt) {
+    throw RuntimeError(stmt.token, "from ... import ... has not yet been implemented.");
+  }
+
   // --- Expression Evaluation ---
 
   /// Helper to evaluate an expression within a specific [environment].

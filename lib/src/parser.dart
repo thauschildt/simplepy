@@ -296,7 +296,11 @@ class Parser {
   Stmt statement() {
     Stmt? stmt;
     Token token = peek();
-    if (match([TokenType.IF])) {
+    if (match([TokenType.IMPORT])) {
+      return importStatement();
+    } else if (match([TokenType.FROM])) {
+      return fromImportStatement();
+    } else if (match([TokenType.IF])) {
       stmt = ifStatement();
     } else if (match([TokenType.RETURN])) {
       stmt = returnStatement();
@@ -369,6 +373,80 @@ class Parser {
     }
     consume(TokenType.DEDENT, "Expect dedent to close block.");
     return statements;
+  }
+
+  /// Parses an `import <module> [as alias]` statement
+  /// importStmt ::= "import" module ("as" alias)?
+  Stmt importStatement() {
+    Token keyword = previous();
+    List<ImportSpecifier> imports = [];
+    do {
+      // module path: math.utils.os etc
+      List<String> path = [];
+      Token name = consume(TokenType.IDENTIFIER, "Expect module name.");
+      path.add(name.lexeme);
+      while (match([TokenType.DOT])) {
+        Token part = consume(TokenType.IDENTIFIER, "Expect module part.");
+        path.add(part.lexeme);
+      }
+      String? alias;
+      if (match([TokenType.AS])) {
+        Token aliasToken = consume(TokenType.IDENTIFIER, "Expect alias name.");
+        alias = aliasToken.lexeme;
+      }
+      imports.add(ImportSpecifier(path, alias));
+    } while (match([TokenType.COMMA]));
+    return ImportStmt(imports, keyword);
+  }
+
+  /// Parses a `from <module> import <name> [as alias], ...` statement
+  /// FromImportStmt ::= "from" module "import" name ("as" alias)? (, name ("as" alias)?)*
+  Stmt fromImportStatement() {
+    Token keyword = previous();
+
+    // module path: from math.utils
+    List<String> modulePath = [];
+
+    Token name = consume(TokenType.IDENTIFIER, "Expect module name.");
+    modulePath.add(name.lexeme);
+
+    while (match([TokenType.DOT])) {
+      Token part = consume(TokenType.IDENTIFIER, "Expect module part.");
+      modulePath.add(part.lexeme);
+    }
+
+    consume(TokenType.IMPORT, "Expect 'import' after module name.");
+
+    List<ImportSelector> selectors = [];
+
+    // from math import *
+    if (match([TokenType.STAR])) {
+      selectors.add(ImportSelector("*", null));
+      return FromImportStmt(modulePath, selectors, keyword);
+    }
+
+    do {
+      Token item = consume(TokenType.IDENTIFIER, "Expect import name.");
+
+      String? alias;
+      if (match([TokenType.AS])) {
+        Token aliasToken = consume(TokenType.IDENTIFIER, "Expect alias name.");
+        alias = aliasToken.lexeme;
+      }
+
+      selectors.add(ImportSelector(item.lexeme, alias));
+
+      // expect comma or newline after name/alias
+      if (!check(TokenType.COMMA) &&
+          !check(TokenType.NEWLINE) &&
+          !check(TokenType.EOF) &&
+          !check(TokenType.DEDENT)) {
+        throw error(peek(), "Expected ',' between import names.");
+      }
+
+    } while (match([TokenType.COMMA]));
+
+    return FromImportStmt(modulePath, selectors, keyword);
   }
 
   /// Parses an if-elif-else statement.
