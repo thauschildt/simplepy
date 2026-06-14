@@ -3,6 +3,7 @@ import 'dart:math';
 import 'ast_nodes.dart';
 import 'lexer.dart';
 import 'native_methods.dart' as native_methods;
+import 'parser.dart';
 import 'pynum.dart';
 
 // Global flags indicating error states, potentially used by REPL.
@@ -213,6 +214,13 @@ class PyFile {
     vfs[name] = _content.toString();
     isClosed = true;
   }
+}
+
+/// Module class with name and environment
+class PyModule {
+  final String name;
+  final Environment env;
+  PyModule(this.name, this.env);
 }
 
 /// Signatue of native methods
@@ -757,6 +765,16 @@ class Environment {
     throw RuntimeError(name, "Undefined variable '${name.lexeme}'.");
   }
 
+  Object? getByName(String name) {
+    if (values.containsKey(name)) {
+      return values[name];
+    }
+    if (enclosing != null) {
+      return enclosing!.getByName(name);
+    }
+    throw RuntimeError(Token(TokenType.IMPORT, name, null, 0,0), "Undefined variable '$name'.");
+  }
+
   /// Assigns a [value] to an *existing* variable represented by [name].
   ///
   /// Searches the current environment first. If found, updates the value.
@@ -831,6 +849,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   /// Virtual file system
   Map<String, String> vfs = {};
 
+  /// module cache
+  final Map<String, PyModule> _modules = {};
+
+  /// Set of module names currently being loaded, to avoid circular imports
+  final Set<String> _loading = {};
+
   /// The exception caught last, to be used for re-raise
   ExceptionInfo? _lastExceptionInfo;
 
@@ -864,6 +888,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("bool", NativeFunction(_boolBuiltin));
     _registerBuiltin("type", NativeFunction(_typeBuiltin));
     _registerBuiltin("abs", NativeFunction(_absBuiltin));
+    _registerBuiltin("pow", NativeFunction(_powBuiltin));
     //_registerBuiltin("input", NativeFunction(_inputBuiltin));
     _registerBuiltin("list", NativeFunction(_listBuiltin));
     _registerBuiltin("dict", NativeFunction(_dictBuiltin));
@@ -888,9 +913,141 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
   }
 
+  /// Load a module from the virtual file system
+  PyModule _loadModule(Token token, ImportSpecifier module) {
+    String path = module.modulePath.join("/");
+    String name = module.modulePath.join(".");
+    // if module has already been loaded: return that module
+    if (_modules.containsKey(name)) {
+      return _modules[name]!;
+    }
+    final source = vfs["$path.py"];
+    var register={"math": _registerMath, "time": _registerTime, "random": _registerRandom, };
+    if (source == null) {
+      if (register.containsKey(name)) {
+        final moduleEnv = Environment(enclosing: globals);
+        final moduleObj = PyModule(name, moduleEnv);
+        _modules[name] = moduleObj;
+        final previous = _environment;
+        _environment = moduleEnv;
+        register[name]!();
+        _environment = previous;
+        return moduleObj;
+      } else {
+        throw RuntimeError(token, "Module '$name' not found in VFS");
+      }
+    }
+    var tokens = Lexer(source).scanTokens();
+    final parser = Parser(tokens);
+    final program = parser.parse();
+    // new isolated Environment
+    final moduleEnv = Environment(enclosing: globals);
+    final moduleObj = PyModule(name, moduleEnv);
+    _modules[name] = moduleObj;
+    // change environment temporarily
+    final previous = _environment;
+    _environment = moduleEnv;
+    try {
+      for (final stmt in program) {
+        stmt.accept(this);
+      }
+    } finally {
+      _environment = previous;
+    }
+    return moduleObj;
+  }
+
   /// Helper to define built-ins in the global environment.
   void _registerBuiltin(String name, PyCallable callable) {
     globals.define(name, callable);
+  }
+
+  void _registerMath() {
+    _environment.define("sin", NativeFunction((inter, args, kwargs) => PyNum.double(sin(args[0].toDouble()))));
+    _environment.define("cos", NativeFunction((inter, args, kwargs) => PyNum.double(cos(args[0].toDouble()))));
+    _environment.define("tan", NativeFunction((inter, args, kwargs) => PyNum.double(tan(args[0].toDouble()))));
+    _environment.define("asin", NativeFunction((inter, args, kwargs) => PyNum.double(asin(args[0].toDouble()))));
+    _environment.define("acos", NativeFunction((inter, args, kwargs) => PyNum.double(acos(args[0].toDouble()))));
+    _environment.define("atan", NativeFunction((inter, args, kwargs) => PyNum.double(atan(args[0].toDouble()))));
+    _environment.define("atan2", NativeFunction((inter, args, kwargs) => PyNum.double(atan2(args[0].toDouble(), args[1].toDouble()))));
+    _environment.define("degrees", NativeFunction((inter, args, kwargs) => PyNum.double(args[0].toDouble()*180.0/pi)));
+    _environment.define("radians", NativeFunction((inter, args, kwargs) => PyNum.double(args[0].toDouble()*pi/180.0)));
+    _environment.define("exp", NativeFunction((inter, args, kwargs) => PyNum.double(exp(args[0].toDouble()))));
+    _environment.define("log", NativeFunction((inter, args, kwargs) {
+      double x = args[0].toDouble();
+      double y = args.length>1 ? log(args[1].toDouble()) : 1;
+      return PyNum.double(log(x)/y);
+    }));
+    _environment.define("log2", NativeFunction((inter, args, kwargs) => PyNum.double(log(args[0].toDouble())/log(2.0))));
+    _environment.define("log10", NativeFunction((inter, args, kwargs) => PyNum.double(log(args[0].toDouble())/log(10.0))));
+    _environment.define("pow", NativeFunction((inter, args, kwargs) {
+      if (args.length!=2) throw RuntimeError(Token(TokenType.IDENTIFIER, "pow", null, 0,0), "pow expected 2 arguments, got ${args.length}");
+      PyNum x = args[0];
+      PyNum y = args[1];
+      return PyNum.double(pow(x.toDouble(), y.toDouble()) as double);
+    }));
+    _environment.define("sqrt", NativeFunction((inter, args, kwargs) => PyNum.double(sqrt(args[0].toDouble()))));
+    _environment.define("cbrt", NativeFunction((inter, args, kwargs) => PyNum.double(pow(args[0].toDouble(), 1.0/3.0) as double)));
+    _environment.define("pi", PyNum.double(pi));
+    _environment.define("e", PyNum.double(e));
+    _environment.define("tau", PyNum.double(2.0*pi));
+    _environment.define("inf", PyNum.double(double.infinity));
+    _environment.define("nan", PyNum.double(double.nan));
+  }
+
+  Random _rand=Random();
+  void _registerRandom() {
+    _environment.define("seed", NativeFunction((inter, args, kwargs) {
+      _rand = Random(args[0].intValue!.toInt());
+    }));
+    _environment.define("randint", NativeFunction((inter, args, kwargs) {
+      int a=args[0].intValue!.toInt(), b=args[1].intValue!.toInt();
+      int r = _rand.nextInt(b-a+1)+a;
+      return PyNum.int(r);
+    }));
+    _environment.define("randrange", NativeFunction((inter, args, kwargs) {
+      int a=args[0].intValue!.toInt(), b=args[1].intValue!.toInt(), c=1;
+      if (args.length > 2) c=args[2].intValue!.toInt();
+      int r = _rand.nextInt((b-a-1)~/c)*c+a;
+      return PyNum.int(r);
+    }));
+    _environment.define("choice", NativeFunction((inter, args, kwargs) {
+      if (args[0] is! PyList && args[0] is! PyTuple && args[0] is! Set) throw "TypeError: choice() expects list, got ${getTypeString(args[0])}.";
+      if (args[0].list.length<1) throw "IndexError: Cannot choose from an empty sequence";
+      final List list = args[0].list;
+      return list[_rand.nextInt(list.length)];
+    }));
+    _environment.define("random", NativeFunction((inter, args, kwargs) {
+      double r = _rand.nextDouble();
+      return PyNum.double(r);
+    }));
+    _environment.define("uniform", NativeFunction((inter, args, kwargs) {
+      double a=args[0].toDouble(), b=args[1].toDouble();
+      double r = _rand.nextDouble()*(b-a)+a;
+      return PyNum.double(r);
+    }));
+    _environment.define("gauss", NativeFunction((inter, args, kwargs) {
+      double mu=args[0].toDouble(), sigma=args[1].toDouble();
+      double u1 = _rand.nextDouble();
+      double u2 = _rand.nextDouble();
+      return PyNum.double(mu+sigma*sqrt(-2.0*log(u1))*cos(2*pi*u2));
+    }));
+    
+
+  }
+
+  void _registerTime() {
+    _environment.define("time", NativeFunction((inter, args, kwargs) => PyNum.double(DateTime.now().microsecondsSinceEpoch*1e-6)));
+    _environment.define("time_ns", NativeFunction((inter, args, kwargs) => PyNum.double(DateTime.now().microsecondsSinceEpoch*1000)));
+    _environment.define("sleep", NativeFunction((inter, args, kwargs) {
+      int t0 = DateTime.now().microsecondsSinceEpoch;
+      double t1 = t0+1e6*args[0].toDouble();
+      while (DateTime.now().microsecondsSinceEpoch<t1) {
+        // TODO: replace by non-blocking delay
+      }
+      // await does not work, since interpreter is running synchronously
+      //await Future.delayed(Duration(microseconds: (args[0].toDouble()*1e6).round()));
+    }));
   }
 
   void registerFunction(String name, Function(List args, Map kwargs) function) {
@@ -1342,6 +1499,32 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     throw RuntimeError(
       builtInToken('abs'),
       "TypeError: bad operand type for abs(): '${Interpreter.getTypeString(arg)}'",
+    );
+  }
+
+  /// Implementation of `pow(x,y,[z])`
+  static Object? _powBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('pow', positionalArgs, keywordArgs, required: 2, maxOptional: 1);
+    final x = positionalArgs[0];
+    final y = positionalArgs[1];
+    if (x is PyNum && y is PyNum && x.isInt && x.isInt) {
+      if (positionalArgs.length==3) {
+        final z = positionalArgs[2];
+        if (z is PyNum && z.isInt) {
+          return PyNum.bigInt(x.intValue!.modPow(y.intValue!, z.intValue!));
+        }
+      }
+      else {
+        return x.pow(y);
+      }
+    }
+    throw RuntimeError(
+      builtInToken('pow'),
+      "TypeError: bad operand type for pow(): '${positionalArgs.map((e) => Interpreter.getTypeString(e)).join(", ")}'",
     );
   }
 
@@ -2440,16 +2623,62 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
   }
 
   /// Visitor method for executing an [ImportStmt].
+  /// Loads the specified module(s) and adds them to the environment
   @override
   void visitImportStmt(ImportStmt stmt) {
-    throw RuntimeError(stmt.token, "import ... has not yet been implemented.");
+    for (var module in stmt.imports) {
+      String name = module.modulePath.join(".");
+      final nameOrAlias = module.alias ?? name;
+      if (_loading.contains(name)) {
+        _environment.define(nameOrAlias, _modules[name]!);
+        // ignore circular imports
+        continue;
+      }
+      _loading.add(name);
+      try {
+        final moduleObj = _loadModule(stmt.token, module);
+          _environment.define(nameOrAlias, moduleObj);
+      } finally {
+        _loading.remove(name);
+      }
+    } 
   }
-
 
   /// Visitor method for executing an [ImportStmt].
   @override
   void visitFromImportStmt(FromImportStmt stmt) {
-    throw RuntimeError(stmt.token, "from ... import ... has not yet been implemented.");
+    final moduleSpecifier = ImportSpecifier(
+      stmt.modulePath, null
+    );
+    final module = _loadModule(stmt.token, moduleSpecifier);
+    for (final imported in stmt.selectors) {
+
+      if (imported.name == "*") {
+        if (stmt.selectors.length>1) {
+          throw RuntimeError(stmt.token,"SyntaxError: invalid Syntax");
+        }
+        final entries = module.env.values.entries;
+        for (final entry in entries) {
+          final key = entry.key;
+          if (key.startsWith("_")) continue;
+          _environment.define(key, entry.value);
+        }
+        break;
+      }
+
+      final sourceName = imported.name;
+      final targetName = imported.alias ?? sourceName;
+
+      try {
+        final value = module.env.getByName(sourceName);
+        _environment.define(targetName, value);
+      } catch (_) {
+        throw RuntimeError(
+          stmt.token,
+          "Cannot import name '$sourceName' from '${module.name}'",
+        );
+      }
+    }
   }
 
   // --- Expression Evaluation ---
@@ -3613,6 +3842,15 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           );
         }
         rethrow; // Rethrow if it was already an AttributeError
+      }
+    } else if (object is PyModule) {
+      try {
+        return object.env.get(expr.name);
+      } on RuntimeError {
+        throw RuntimeError(
+            expr.name,
+            "AttributeError: module '${object.name}' has no attribute '${expr.name.lexeme}'",
+          );
       }
     }
 

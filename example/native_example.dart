@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:simplepy/simplepy.dart';
 
 Object? _pow(

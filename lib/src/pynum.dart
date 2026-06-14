@@ -248,7 +248,14 @@ final class PyNum implements Comparable<PyNum> {
   int compareTo(PyNum other) => this < other ? -1 : (this > other ? 1 : 0);
 
   @override
-  String toString() => isInt ? _intValue.toString() : _doubleValue.toString();
+  String toString() {
+    if (isInt) return _intValue.toString();
+    if (_doubleValue!.isFinite) return _doubleValue.toString();
+    if (_doubleValue.isNaN) return "nan";
+    if (_doubleValue.isInfinite && _doubleValue>0) return "inf";
+    if (_doubleValue.isInfinite && _doubleValue<0) return "-inf";
+    return "invalid value";
+  }
 
   // --- Internal helpers ---
   void _checkInt(PyNum other) {

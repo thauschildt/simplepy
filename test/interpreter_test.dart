@@ -33,11 +33,15 @@ class RunResult {
 }
 
 /// helper function for code execution and registering output and errors
-RunResult runCode(String source, [Interpreter? existingInterpreter]) {
+RunResult runCode(String source, [Interpreter? existingInterpreter, Map files=const {}]) {
   final interpreter = existingInterpreter ?? Interpreter();
   final outputBuffer = StringBuffer();
   Object? caughtError;
   List<Stmt> statements = [];
+
+  for (String f in files.keys) {
+    interpreter.vfs[f]=files[f];
+  }
 
   try {
     void capturePrint(String message) {
@@ -2529,6 +2533,159 @@ f=open("tmp.txt","w")
 f.writelines([1, 2, 3])
 ''');
       expect(result.error, isA<Exception>());
+    });
+  });
+
+  group('Import module', () {
+    test('should import module from a file in vfs', () {
+      final source = '''
+import module
+y=module.f(10)
+print(y)
+''';
+      final moduleSource = 'def f(x): return x**2';
+      final result = runCode(source, null, {"module.py": moduleSource});
+      expect(result.output, equals('100\n'));
+    });
+    test('should import module with alias from a file in vfs', () {
+      final source = '''
+import module as test
+y=test.f(10)
+print(y)
+''';
+      final moduleSource = 'def f(x): return x**2';
+      final result = runCode(source, null, {"module.py": moduleSource});
+      expect(result.output, equals('100\n'));
+    });
+    test('should import selected names from a module', () {
+      final source = '''
+from module import f,var
+y=f(10)
+print(y,var)
+''';
+      final moduleSource = 'def f(x): return x**2\nvar=42';
+      final result = runCode(source, null, {"module.py": moduleSource});
+      expect(result.output, equals('100 42\n'));
+    });
+    test('should throw RuntimeError when accessing un-imported variables', () {
+      final source = '''
+from module import f
+y=f(10)
+print(y,var)
+''';
+      final moduleSource = 'def f(x): return x**2\nvar=42';
+      final result = runCode(source, null, {"module.py": moduleSource});
+      expect(result.error, isA<RuntimeError>().having(
+          (e) => e.message,
+          'message',
+          contains('Undefined variable \'var\''),
+        ));
+    });
+
+    test('should handle circular imports correctly', () {
+      final sourceA = 'import b\nx=123';
+      final sourceB = 'import b\nx=456';
+      final source = '''
+import a,b
+print(a.x,b.x,a.b.a.x)
+''';
+      final result = runCode(source, null, {"a.py": sourceA, "b.py": sourceB});
+      expect(result.output, equals('123 456 123\n'));
+    });
+  });
+
+  group('math module', () {
+    test('math trigonometric functions', () {
+      final source = '''
+from math import *
+print(sin(pi/4))
+print(cos(pi/4))
+print(tan(pi/4)+1e-9)
+print(asin(0.5))
+print(acos(0.5))
+print(atan(0.5))
+print(atan2(1,-2))
+print(atan2(-1,2))
+  ''';
+        final result = runCode(source);
+        expect(result.output, matches('0.707.*\n0.707.*\n1.0000.*\n0.523.*\n1.047.*\n0.463.*\n2.677.*\n-0.463.*\n'));
+    });
+
+    test('math power, exp, root functions', () {
+      final source = '''
+print(pow(12,34,56))
+from math import *
+print(exp(1))
+print(log(10))
+print(log(10,100))
+print(log10(30))
+print(log(100,2))
+print(pow(12,3))
+print(pow(1.2,3.4))
+print(sqrt(42))
+print(cbrt(100))
+  ''';
+        final result = runCode(source);
+        expect(result.output, matches('16\n2.718.*\n2.302.*\n0.5\n1.47.*\n6.64.*\n1728\n1.858.*\n6.48.*\n4.64.*\n'));
+    });
+
+    test('math degrees, radians functions and constants', () {
+      final source = '''
+from math import *
+print(degrees(3.14))
+print(radians(90))
+print(e, pi, tau)
+print(nan, inf)
+  ''';
+        final result = runCode(source);
+        expect(result.output, matches('179.*\n1.57.*\n2.718.* 3.14.* 6.28.*\nnan inf\n'));
+    });
+  });
+
+
+  group('random module', () {
+    test('seed() and random()', () {
+      final source = '''
+from random import *
+seed(123)
+print(random())
+seed(124)
+print(random())
+seed(123)
+print(random())
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals('0.9157476847667142\n0.020948753960384314\n0.9157476847667142\n'));
+    });
+    test('randint(), randrange()', () {
+      final source = '''
+from random import *
+seed(123)
+print(randint(10,20))
+print(randint(10,20))
+print(randint(10,20))
+print(randrange(10,12))
+print(randrange(10,12))
+print(randrange(10,12))
+print(randrange(10,12))
+print(randrange(10,12))
+print(randrange(10,90,5))
+print(randrange(10,90,5))
+print(randrange(10,90,5))
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals('19\n11\n12\n10\n10\n10\n10\n10\n45\n55\n45\n'));
+    });
+    test('randint(), randchoice()', () {
+      final source = '''
+from random import *
+seed(123)
+l=[1,2,3,"a","b",[]]
+for i in range(10):
+  print(choice(l))
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals('b\na\na\na\n[]\n[]\n1\n3\nb\na\n'));
     });
   });
 }

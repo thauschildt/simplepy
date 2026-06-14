@@ -1,3 +1,8 @@
+## 2.1.0
+- added `import ... [as ...]` and `from ... import ...` statements. modules can be imported from virtual file system.
+- added standard modules `math, random, time` with a subset of their methods.
+- added `pow()` builtin method
+
 ## 2.0.0
 - python integers and floats are represented by `PyNum` class
 - previous verions 1.3.2 and 1.3.2 were using BigInt, mistakenly without increasing the major version number despite breaking change
