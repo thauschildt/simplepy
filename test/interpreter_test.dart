@@ -2613,7 +2613,7 @@ print(atan2(-1,2))
 
     test('math power, exp, root functions', () {
       final source = '''
-print(pow(12,34,56))
+print(pow(12,34,56)) # builtin
 from math import *
 print(exp(1))
 print(log(10))
@@ -2626,7 +2626,7 @@ print(sqrt(42))
 print(cbrt(100))
   ''';
         final result = runCode(source);
-        expect(result.output, matches('16\n2.718.*\n2.302.*\n0.5\n1.47.*\n6.64.*\n1728\n1.858.*\n6.48.*\n4.64.*\n'));
+        expect(result.output, matches('16\n2.718.*\n2.302.*\n0.5\n1.47.*\n6.64.*\n1728.0\n1.858.*\n6.48.*\n4.64.*\n'));
     });
 
     test('math degrees, radians functions and constants', () {
