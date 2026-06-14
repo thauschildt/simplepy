@@ -1187,6 +1187,74 @@ print(repr(print))
     });
   });
 
+  if (false) group('Ternary expressions', () {
+    test('basic ternary expressions', () {
+      final source = '''
+x = 12 if True else 34
+y = 12 if False else 34
+print(x,y)
+''';
+      final result = runCode(source);
+      expect(result.output, equals('12 34\n'));
+    });
+
+
+    test('nested ternary', () {
+      final source = '''
+x = 12 if False else 34 if True else 56
+y = 12 if False else 34 if False else 56
+z = (12 if False else 34) if True else 56
+print(x,y,z)
+''';
+      final result = runCode(source);
+      expect(result.output, equals('34 56 34\n'));
+    });
+
+    test('ternary weaker than and, or', () {
+      final source = '''
+x = 12 if False or True else 34
+y = 12 if False and True else 34
+print(x,y)
+''';
+      final result = runCode(source);
+      expect(result.output, equals('12 34\n'));
+    });
+
+    test('ternary evaluates only necessary branch', () {
+      final source = '''
+x = unknown if False else 42
+y = 43 if True else unknown
+print(x,y)
+''';
+      final result = runCode(source);
+      expect(result.output, equals('42 43\n'));
+    });
+
+    test('ternary with arithmetic', () {
+      final source = '''
+x = (10 if True else 20) + 5
+y = 1 + 2 if True else 3 + 4
+print(x,y)
+''';
+      final result = runCode(source);
+      expect(result.output, equals('15 3\n'));
+    });
+
+    test('ternary with non-bool conditions', () {
+      final source = '''
+x1 = "yes" if "abc" else "no"
+x2 = "yes" if "" else "no"
+y1 = 12 if 0 else 34
+y2 = 12 if 5 else 34
+print(x1,x2,y1,y2)
+''';
+      final result = runCode(source);
+      expect(result.output, equals('yes no 34 12\n'));
+    });
+
+    
+  });
+
   group('Interpreter Lambdas', () {
     test('should create and call simple lambda', () {
       final source = '''

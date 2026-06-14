@@ -89,6 +89,9 @@ abstract class ExprVisitor<R> {
 
   /// Visits a [ListComprehensionExpr] node (e.g., `{i for i in range(5)]`).
   R visitSetComprehensionExpr(SetComprehensionExpr expr);
+  
+  /// Visits a [TernaryExpr] node (e.g., `"x" if 2==3 else "y"`).
+  visitTernaryExpr(TernaryExpr ternaryExpr) {}
 }
 
 /// Represents an assignment expression (e.g., `name = value`).
@@ -393,6 +396,21 @@ class IfClause implements ComprehensionClause {
   @override
   R accept<R>(ComprehensionVisitor<R> visitor) {
     return visitor.visitIfClause(this);
+  }
+}
+
+class TernaryExpr extends Expr {
+  final Expr condition;
+  final Expr thenBranch;
+  final Expr elseBranch;
+  TernaryExpr(
+    this.condition,
+    this.thenBranch,
+    this.elseBranch,
+  );
+  @override
+  T accept<T>(ExprVisitor<T> visitor) {
+    return visitor.visitTernaryExpr(this);
   }
 }
 
@@ -1166,7 +1184,6 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
         stmt.elseBlock; // != null ? printStmt(stmt.elseBlock!) : "null";
     final finallyBlock =
         stmt.finallyBlock; // != null ? printStmt(stmt.finallyBlock!) : "null";
-
     return parenthesize("try_stmt", [
       "body $tryBlock,",
       "handlers [$exceptClauses],",
@@ -1174,6 +1191,16 @@ class AstPrinter implements ExprVisitor<String>, StmtVisitor<String> {
       if (finallyBlock != null) "finallybody ${printStmt(finallyBlock)}",
     ]);
   }
+
+  @override
+  visitTernaryExpr(TernaryExpr expr) {
+    return parenthesize("ternary_expr", [
+      "then ${printExpr(expr.thenBranch)},"
+      "if ${printExpr(expr.condition)},"
+      "else ${printExpr(expr.elseBranch)}",
+    ]);
+  }
+
 
   // Hilfsfunktion für ExceptClause
   String _printExceptClause(ExceptClause clause) {

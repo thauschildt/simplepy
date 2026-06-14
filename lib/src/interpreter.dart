@@ -4451,6 +4451,14 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
   }
 
+  @override
+  visitTernaryExpr(TernaryExpr expr) {
+    if (isTruthy(evaluate(expr.condition))) {
+      return evaluate(expr.thenBranch);
+    }
+    return evaluate(expr.elseBranch);
+  }
+
   /// Check if an exception mtaches the type in the except clause,
   /// taking into account inheritance (e. g. `except MyBaseError` catches `MySubError` as well).
   bool _matchesExceptionType(PyInstance exception, String expectedType) {

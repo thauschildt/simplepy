@@ -648,6 +648,8 @@ class Parser {
   Expr assignment() {
     Expr expr =
         logicOr(); // Start with lowest precedence (or maybe ternary later)
+        // TODO: replace with ternary();
+        // This requires some fixes in comprehension parsing: [x for x in range(10) if x>3 if x<5] doesnt work
 
     if (match([
       TokenType.PLUS_EQUAL,
@@ -685,6 +687,26 @@ class Parser {
       error(equals, "Invalid assignment target.");
     }
     return expr; // Not an assignment, just return the parsed expression
+  }
+
+  /// Parses a ternary expression-
+  /// ternary ::= expression "if" condition "else" expression
+  Expr ternary() {
+    Expr expr = logicOr();
+    if (match([TokenType.IF])) {
+      Expr condition = logicOr();
+      consume(
+        TokenType.ELSE,
+        "Expected 'else' in conditional expression.",
+      );
+      Expr elseBranch = ternary(); // rechtsassoziativ
+      return TernaryExpr(
+        condition,
+        expr,
+        elseBranch,
+      );
+    }
+    return expr;
   }
 
   /// Parses logical OR expressions. ('or')
