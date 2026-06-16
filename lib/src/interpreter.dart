@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:convert';
 
 import 'ast_nodes.dart';
 import 'lexer.dart';
@@ -922,7 +923,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       return _modules[name]!;
     }
     final source = vfs["$path.py"];
-    var register={"math": _registerMath, "time": _registerTime, "random": _registerRandom, };
+    var register={
+      "json": _registerJson,
+      "math": _registerMath,
+      "random": _registerRandom,
+      "time": _registerTime,
+      };
     if (source == null) {
       if (register.containsKey(name)) {
         final moduleEnv = Environment(enclosing: globals);
@@ -1050,6 +1056,90 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }));
   }
 
+  void _registerJson() {
+    _environment.define("dumps", NativeFunction((inter, args, kwargs) {
+      var json = _jsonDumps(args[0], {});
+      return json;
+    }));
+
+    _environment.define("dump", NativeFunction((inter, args, kwargs) {
+      if (args[1] is PyFile) {
+        var json = _jsonDumps(args[0], {});
+        args[1].write(json);
+      } else {
+        throw Exception("AttributeError: Cannot write to '${getTypeString(args[1])}' object");
+      }
+    }));
+    _environment.define("loads", NativeFunction((inter, args, kwargs) {
+      var obj= _toPyObject(jsonDecode(args[0]));
+      return obj;
+    }));
+    _environment.define("load", NativeFunction((inter, args, kwargs) {
+      if (args[0] is PyFile) {
+        String content = args[0].read();
+        var obj= _toPyObject(jsonDecode(content));
+        return obj;
+      } else {
+        throw Exception("AttributeError: Cannot read from '${getTypeString(args[1])}' object");
+      }
+    }));
+  }
+
+  dynamic _toPyObject(Object? obj) {
+    if (obj is String || obj == null || obj is bool) return obj;
+    if (obj is num) return PyNum(obj);
+    if (obj is List) {
+      List l = [];
+      for (var ele in obj) {
+        l.add(_toPyObject(ele));
+      }
+      return PyList(l);
+    }
+    if (obj is Map) {
+      Map m = {};
+      obj.forEach((k,v) {
+        m[_toPyObject(k)] = _toPyObject(v);
+      });
+      return m;
+    }
+    throw "Error";
+  }
+
+  String _jsonDumps(dynamic obj, Set<Object> visited) {
+    if (obj is String) {
+      final escaped = obj
+          .replaceAll('\\', '\\\\')
+          .replaceAll("\"", "\\\"")
+          .replaceAll('\n', '\\n')
+          .replaceAll('\r', '\\r')
+          .replaceAll('\t', '\\t');
+      return "\"$escaped\"";
+    }
+    if (obj is PyNum) {
+      return "$obj";
+    }
+    if (obj is bool) {
+      return obj? "true" : "false";
+    }
+    if (obj == null) {
+      return "null";
+    }
+    if (visited.contains(obj)) {
+      throw RuntimeError(Token(TokenType.IDENTIFIER, "json.dump",null,0,0), "ValueError: Circular reference detected");
+    }
+    visited.add(obj);
+    if (obj is PyList) {
+      return "[${obj.list.map((list) => _jsonDumps(list, visited)).join(', ')}]";
+    }
+    if (obj is PyTuple) {
+      return "[${obj.tuple.map((list) => _jsonDumps(list, visited)).join(', ')}]";
+    }
+    if (obj is Map) {
+      return "{${obj.keys.map((k) => "${_jsonDumps('$k', visited)}: ${_jsonDumps(obj[k], visited)}").join(', ')}}";
+    }
+    throw Exception("TypeError: Object of Type ${getTypeString(obj)} is not JSON serializable.");
+  }
+
   void registerFunction(String name, Function(List args, Map kwargs) function) {
     globals.define(
       name,
@@ -1174,7 +1264,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     if (obj is NativeFunction) return 'builtin_function_or_method';
     if (obj is PyInstance) return obj.klass.name;
     if (obj is PyClass) return 'type';
-    return 'object'; // Default fallback
+    return 'object(${obj.runtimeType})'; // Default fallback
   }
 
   // --- Built-in Function Implementations ---

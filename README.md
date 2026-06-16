@@ -27,6 +27,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
     To make them persistent, you can access them from dart by `interpreter.vfs[filename]`.
   - `import` (only modules from virtual file system or standard modules, no packages yet).
     Available standard modules:
+    - `json` (methods: `dump, dumps, load, loads`)
     - `math` (constants: `e, nan, inf, pi, tau`; methods: `exp, log, log2, log10, pow, sqrt, cbrt`,
     `sin, cos, tan, asin, acos, atan, atan2, degrees, radians`)
     - `random` (methods: `choice, gauss, randint, random, randrange, seed, uniform`)

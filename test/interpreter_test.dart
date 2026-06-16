@@ -1187,6 +1187,7 @@ print(repr(print))
     });
   });
 
+  // Test disabled, because some ternary expressions are not working yet
   if (false) group('Ternary expressions', () {
     test('basic ternary expressions', () {
       final source = '''
@@ -2744,7 +2745,7 @@ print(randrange(10,90,5))
       final result = runCode(source);
       expect(result.output,equals('19\n11\n12\n10\n10\n10\n10\n10\n45\n55\n45\n'));
     });
-    test('randint(), randchoice()', () {
+    test('randint(), choice()', () {
       final source = '''
 from random import *
 seed(123)
@@ -2754,6 +2755,64 @@ for i in range(10):
   ''';
       final result = runCode(source);
       expect(result.output,equals('b\na\na\na\n[]\n[]\n1\n3\nb\na\n'));
+    });
+  });
+
+  group('json module', () {
+    test('dumps()', () {
+      final source = '''
+from json import *
+print(dumps([1, {"a": 2, 3: 'c', 'tuple': (1,2,3)}]))
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals('[1, {"a": 2, "3": "c", "tuple": [1, 2, 3]}]\n'));
+    });
+
+    test('loads()', () {
+      final source = '''
+from json import *
+print(loads('[1, {"a": 2, "3": "c", "tuple": [1, 2, 3]}]'))
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals('[1, {\'a\': 2, \'3\': \'c\', \'tuple\': [1, 2, 3]}]\n'));
+    });
+
+    test('dump()', () {
+      final source = '''
+from json import *
+f=open("test.json", "w")
+dump([1, "a", {2:3}], f)
+f.close()
+f=open("test.json", "r")
+print(f.read())
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals('[1, "a", {"2": 3}]\n'));
+    });
+
+    test('load()', () {
+      final source = '''
+from json import *
+f=open("test.json", "w")
+f.write('{"a": [1,2], "2": [3, 4]}')
+f.close()
+f=open("test.json", "r")
+print(load(f))
+  ''';
+      final result = runCode(source);
+      expect(result.output,equals("{'a': [1, 2], '2': [3, 4]}\n"));
+    });
+
+    test('circular objects', () {
+      final source = '''
+o=[1,2]
+o.append(o)
+import json
+print(json.dumps(o))
+''';
+      final result = runCode(source);
+      expect(result.error, isA<RuntimeError>().having(
+        (e) => e.message, 'message', contains("Circular")));
     });
   });
 }
