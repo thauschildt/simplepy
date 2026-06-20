@@ -6,7 +6,7 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
 - Available python features:
   - Variable types: `int`, `float`, `bool`, `str`, `list`, `dict`, `set`, `tuple`, `NoneType`
     <br>(some `dict` methods with limitations)
-  - f-strings: `{value:[[fill]align][sign][0][width][.precision][dfs]}` ; `#,` and types `b/o/x/e/g/%` are not yet supported.
+  - r-strings, f-strings: `{value:[[fill]align][sign][0][width][.precision][dfs]}` ; `#,` and types `b/o/x/e/g/%` are not yet supported.
   - arithmetic operators: `+ - * / // ** %` and bitwise operators
   - assignments: `= += -= *= /= **= //= %=`
   - comparisons: `== > >= < <= !=`
@@ -16,7 +16,8 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
   - `try`/`except`/`else`/`finally`
   - functions (default arguments, *args, **kwargs are partially implemented), `lambda` functions
   - some built-in functions: `print()`, `range()`, `len()`, `str()`, `repr()`, `int()`, `float()`, `bool()`,
-  `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `pow()`, `sum()`, `isinstance()`
+  `type()`, `list()`, `dict()`, `set()`, `tuple()`, `abs()`, `round()`, `min()`, `max()`, `hex()`, `oct()`,
+  `bin()`, `pow()`, `sum()`, `ord()`, `chr()`, `isinstance()`
   - list, dict and set comprehensions
   - list, string and tuple slices - read only
   - classes (no class attributes, no multiple inheritance)

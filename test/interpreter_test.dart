@@ -875,6 +875,32 @@ print(abs(-0.0))
       );
     });
 
+    // --- hex(), oct(), bin() Tests ---
+    test('hex()/oct()/bin() should return hex/oct/bin string', () {
+      final result = runCode('''
+print(hex(127))
+print(oct(87))
+print(bin(85))
+''');
+      expect(result.error, isNull);
+      expect(result.output, equals('0x7f\n0o127\n0b1010101\n'));
+    });
+
+    test('hex() should raise TypeError for wrong number of arguments or wrong arg type', () {
+      expect(
+        (runCode('hex()').error as RuntimeError).message,
+        contains('takes exactly 1 positional arguments (0 given)'),
+      );
+      expect(
+        (runCode('hex(1, 2)').error as RuntimeError).message,
+        contains('takes exactly 1 positional arguments (2 given)'),
+      );
+      expect(
+        (runCode('hex("123")').error as RuntimeError).message,
+        contains('bad operand type for hex(): \'str\''),
+      );
+    });
+
     // --- list() Tests ---
     test('list() should create lists', () {
       final result = runCode('''
@@ -1185,6 +1211,41 @@ print(repr(print))
         contains('takes exactly 1 positional arguments (2 given)'),
       );
     });
+
+    // --- chr() Test ---
+    test('chr() should return ascii code', () {
+      final result = runCode('''
+s=""
+for i in range(32, 127):
+  s+=chr(i)
+print(s)
+''');
+      expect(
+        result.output,
+        equals(
+          " !\"#\$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n",
+        ),
+      );
+    });
+
+        // --- ord() Test ---
+    test('ord() should return ascii code', () {
+      final result = runCode(r'''
+s=" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+for c in s:
+  print(ord(c))
+''');
+      String s="";
+      for (int i=32; i<127; i++) {
+        s+="$i\n";
+      }
+      expect(
+        result.output,
+        equals(s,
+        ),
+      );
+    });
+    
   });
 
   // Test disabled, because some ternary expressions are not working yet
@@ -1350,7 +1411,7 @@ def apply_to_list(func, item):
     });
   }); // end of lambda tests
 
-  group('Interpreter F-Strings', () {
+  group('Interpreter F-Strings and R-Strings', () {
     test('Basic variable interpolation', () {
       final result = runCode('''
 name = "World"
@@ -1360,6 +1421,25 @@ print(f'Value: {num}')
 ''');
       expect(result.error, isNull, reason: result.error?.toString());
       expect(result.output, equals("Hello World!\nValue: 123\n"));
+    });
+
+  test('f-string with escape', () {
+    final result = runCode(r'''
+name = "World"
+print(f"Hello\t\r\b{name}! \\t \"")
+''');
+      
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals("Hello\t\r\bWorld! \\t \"\n"));
+    });
+
+    test('r-string with escape', () {
+    final result = runCode(r'''
+print(r"Hello\t!")
+print(r"Hello\\t!")
+''');
+      expect(result.error, isNull, reason: result.error?.toString());
+      expect(result.output, equals("Hello\\t!\nHello\\\\t!\n"));
     });
 
     test('Basic expression interpolation', () {

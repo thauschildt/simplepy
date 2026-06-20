@@ -1197,8 +1197,8 @@ class Parser {
     List<dynamic> stringParts = [];
     bool hasFString = false;
 
-    // first token: String oder F-String
-    if (match([TokenType.STRING, TokenType.F_STRING])) {
+    // first token: String or f- or r-string
+    if (match([TokenType.STRING, TokenType.F_STRING, TokenType.R_STRING])) {
       Token token = previous();
       if (token.type == TokenType.F_STRING) {
         hasFString = true;
@@ -1207,8 +1207,8 @@ class Parser {
         stringParts.add(token.literal as String);
       }
 
-      // Sammle weitere aufeinanderfolgende String/F-String-Tokens
-      while (match([TokenType.STRING, TokenType.F_STRING])) {
+      // Collect further string/f-/r-strings
+      while (match([TokenType.STRING, TokenType.F_STRING, TokenType.R_STRING])) {
         Token nextToken = previous();
         if (nextToken.type == TokenType.F_STRING) {
           hasFString = true;

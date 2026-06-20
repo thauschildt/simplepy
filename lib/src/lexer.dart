@@ -57,6 +57,7 @@ enum TokenType {
   IDENTIFIER,
   STRING,
   F_STRING,
+  R_STRING,
   NUMBER,
 
   // Keywords.
@@ -374,15 +375,17 @@ class Lexer {
           string(c, false);
         }
         break;
-      // --- Potential F-string ---
+      // --- Potential F-string or R-string ---
       case 'f':
       case 'F':
+      case 'r':
+      case 'R':
         String q = peek();
         if (q == '"' || q == "'") {
           String quoteType = q;
           bool multiline = peekNext(1) == q && peekNext(2) == q;
           advance();
-          fstring(quoteType, multiline);
+          frstring(quoteType, c, multiline);
         } else {
           // Just an identifier. Go back to include the 'f' in the identifier name
           current--;
@@ -761,7 +764,6 @@ class Lexer {
   /// or multiline strings enclosed in ''' or """.
   /// Handles unterminated strings by throwing a [LexerError].
   /// [quoteType] is the opening quote character (' or ").
-  /// TODO: Implement handling of escape sequences (e.g., \n, \", \\).
   void string(String quoteType, [bool multiline = false]) {
     int startLine = line;
     int startCol = currentColumn();
@@ -780,6 +782,12 @@ class Lexer {
           startCol,
           multiline ? "Unterminated multiline string." : "Unterminated string.",
         );
+      }
+      // don't stop at \"
+      if (peek() == '\\') {
+        advance();
+        if (!isAtEnd()) advance();
+        continue;
       }
       // check for closing quotation marks
       if (!multiline && peek() == quoteType) {
@@ -820,13 +828,16 @@ class Lexer {
     addToken(TokenType.STRING, processedValue);
   }
 
-  /// Scans an f-string literal. Finds closing quote, handles basic escapes, but preserves content.
-  void fstring(String quoteType, [bool multiline = false]) {
+  /// Scans an f-string or r-string literal.
+  /// Finds closing quote, handles basic escapes in case of prefix 'f', but preserves content.
+  /// fr-strings are not supported yet.
+  void frstring(String quoteType, String prefix, [bool multiline = false]) {
     int startLine = line;
     // Start column is the 'f', which is at source[start-2] (assuming 'f' is at start-2)
     int startCol =
         (start - lineStart) - 1; // 'f' is 2 chars before the opening quote
     int contentStart = current; // Position after the opening quote(s)
+    prefix = prefix.toLowerCase();
 
     if (multiline) {
       // Skip the opening triple quotes (e.g., f""")
@@ -841,8 +852,8 @@ class Lexer {
           startLine,
           startCol,
           multiline
-              ? "Unterminated multiline f-string."
-              : "Unterminated f-string.",
+              ? "Unterminated multiline $prefix-string."
+              : "Unterminated $prefix-string.",
         );
       }
 
@@ -866,12 +877,12 @@ class Lexer {
         line++;
         lineStart = current + 1;
       }
-      // Newline in single-line f-string? → Error!
+      // Newline in single-line f- or r-string? → Error!
       else if (!multiline && peek() == '\n') {
         throw LexerError(
           line,
           current - lineStart + 1,
-          "Unterminated f-string (newline not allowed in single-line f-strings).",
+          "Unterminated $prefix-string (newline not allowed in single-line $prefix-strings).",
         );
       }
       advance(); // Consume the current character
@@ -890,24 +901,39 @@ class Lexer {
 
     // Extract the content between the quotes
     String rawContent = source.substring(contentStart, contentEnd);
-    // Lexeme includes 'f' prefix and quotes for context
+    if (prefix != 'r') {
+      rawContent = _processEscapes(rawContent);
+    }
+
+    // Lexeme includes 'f' or 'r' prefix and quotes for context
     String lexeme = source.substring(start, current);
 
     // Add token for the parser to handle
     tokens.add(
-      Token(TokenType.F_STRING, lexeme, rawContent, startLine, startCol),
+      Token(prefix == 'f' ? TokenType.F_STRING : TokenType.R_STRING,
+        lexeme, rawContent, startLine, startCol),
     );
   }
 
   // Helper to process basic string escapes (can be used by string() and by fstring())
   String _processEscapes(String value) {
-    // Very basic example, to be expanded
-    value = value.replaceAll('\\n', '\n');
-    value = value.replaceAll('\\t', '\t');
-    value = value.replaceAll('\\\\', '\\');
-    value = value.replaceAll('\\\'', '\'');
-    value = value.replaceAll('\\"', '"');
-    // Add more escapes as needed (\r, \b, \f, \uXXXX, \UXXXXXXXX)
+    const replacements = {
+      r'\n': '\n',
+      r'\r': '\r',
+      r'\t': '\t',
+      r'\b': '\b',
+      r'\f': '\f',
+      r'\v': '\v',
+      r'\\': '\\',
+      r"\'": "'",
+      r'\"': '"',
+    };
+    
+    String pattern = replacements.keys.join("|").replaceAll(r"\",r"\\");
+    value = value.replaceAllMapped(
+      RegExp("($pattern)"), (match) {
+        return replacements[match.group(0)]??"";
+      });
     return value;
   }
 

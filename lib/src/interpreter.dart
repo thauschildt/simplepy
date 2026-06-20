@@ -773,7 +773,7 @@ class Environment {
     if (enclosing != null) {
       return enclosing!.getByName(name);
     }
-    throw RuntimeError(Token(TokenType.IMPORT, name, null, 0,0), "Undefined variable '$name'.");
+    return null;
   }
 
   /// Assigns a [value] to an *existing* variable represented by [name].
@@ -890,6 +890,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("type", NativeFunction(_typeBuiltin));
     _registerBuiltin("abs", NativeFunction(_absBuiltin));
     _registerBuiltin("pow", NativeFunction(_powBuiltin));
+    _registerBuiltin("hex", NativeFunction(_hexBuiltin));
+    _registerBuiltin("oct", NativeFunction(_octBuiltin));
+    _registerBuiltin("bin", NativeFunction(_binBuiltin));
     //_registerBuiltin("input", NativeFunction(_inputBuiltin));
     _registerBuiltin("list", NativeFunction(_listBuiltin));
     _registerBuiltin("dict", NativeFunction(_dictBuiltin));
@@ -900,6 +903,9 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     _registerBuiltin("max", NativeFunction(_maxBuiltin));
     _registerBuiltin("sum", NativeFunction(_sumBuiltin));
     _registerBuiltin("repr", NativeFunction(_reprBuiltin));
+    _registerBuiltin("ord", NativeFunction(_ordBuiltin));
+    _registerBuiltin("chr", NativeFunction(_chrBuiltin));
+    
     _registerBuiltin("isinstance", NativeFunction(_isinstanceBuiltin));
     _registerBuiltin("open", NativeFunction(_openBuiltin));
   }
@@ -1038,7 +1044,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       double u2 = _rand.nextDouble();
       return PyNum.double(mu+sigma*sqrt(-2.0*log(u1))*cos(2*pi*u2));
     }));
-    
+
 
   }
 
@@ -1618,6 +1624,57 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     );
   }
 
+  /// Implementation of `hex(x)`
+  static Object? _hexBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('hex', positionalArgs, keywordArgs, required: 1, maxOptional: 0);
+    final x = positionalArgs[0];
+    if (x is PyNum && x.isInt) {
+      return "0x${x.intValue!.toInt().toRadixString(16)}";
+    }
+    throw RuntimeError(
+      builtInToken('hex'),
+      "TypeError: bad operand type for hex(): '${positionalArgs.map((e) => Interpreter.getTypeString(e)).join(", ")}'",
+    );
+  }
+
+  /// Implementation of `oct(x)`
+  static Object? _octBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('oct', positionalArgs, keywordArgs, required: 1, maxOptional: 0);
+    final x = positionalArgs[0];
+    if (x is PyNum && x.isInt) {
+      return "0o${x.intValue!.toInt().toRadixString(8)}";
+    }
+    throw RuntimeError(
+      builtInToken('oct'),
+      "TypeError: bad operand type for oct(): '${positionalArgs.map((e) => Interpreter.getTypeString(e)).join(", ")}'",
+    );
+  }
+
+  /// Implementation of `bin(x)`
+  static Object? _binBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('bin', positionalArgs, keywordArgs, required: 1, maxOptional: 0);
+    final x = positionalArgs[0];
+    if (x is PyNum && x.isInt) {
+      return "0b${x.intValue!.toInt().toRadixString(2)}";
+    }
+    throw RuntimeError(
+      builtInToken('bin'),
+      "TypeError: bad operand type for bin(): '${positionalArgs.map((e) => Interpreter.getTypeString(e)).join(", ")}'",
+    );
+  }
+
   /// Implementation of `input([prompt])`
   // static Object? _inputBuiltin(
   //   Interpreter interpreter,
@@ -1794,6 +1851,12 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       return <Object?>[]; // Empty tuple: tuple() -> represented as empty list
     }
     Object? iterable = positionalArgs[0];
+    if (iterable is PyList) {
+      return PyTuple(iterable.list);
+    }
+    if (iterable is Set) {
+      return PyTuple(iterable.toList());
+    }
     if (iterable is Iterable) {
       // Handles List, Set, String chars, Map keys
       if (iterable is Map) {
@@ -1805,7 +1868,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
           '',
         ); // Convert String to iterable of chars
       }
-      return iterable.toList();
+      return PyTuple(iterable.toList());
     }
     throw RuntimeError(
       builtInToken('tuple'),
@@ -2154,6 +2217,26 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     }
     // Fallback für numbers and basic types
     return object.toString();
+  }
+
+  /// Implementation of `ord(char)`
+  static Object? _ordBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('ord', positionalArgs, keywordArgs, required: 1);
+    return PyNum.int((positionalArgs[0] as String).codeUnitAt(0));
+  }
+
+  /// Implementation of `chr(code)`
+  static Object? _chrBuiltin(
+    Interpreter interpreter,
+    List<Object?> positionalArgs,
+    Map<String, Object?> keywordArgs,
+  ) {
+    _checkNumArgs('chr', positionalArgs, keywordArgs, required: 1);
+    return String.fromCharCode((positionalArgs[0] as PyNum).intValue!.toInt());
   }
 
   /// `isinstance(object, classinfo)` implementation.
