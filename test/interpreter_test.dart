@@ -1248,8 +1248,9 @@ for c in s:
     
   });
 
+  /*
   // Test disabled, because some ternary expressions are not working yet
-  if (false) group('Ternary expressions', () {
+  group('Ternary expressions', () {
     test('basic ternary expressions', () {
       final source = '''
 x = 12 if True else 34
@@ -1313,9 +1314,8 @@ print(x1,x2,y1,y2)
       final result = runCode(source);
       expect(result.output, equals('yes no 34 12\n'));
     });
-
-    
   });
+  */
 
   group('Interpreter Lambdas', () {
     test('should create and call simple lambda', () {
