@@ -1,3 +1,6 @@
+## 2.2.0
+- added `re` module with `findall()`, `match()`, `search()`, `split()`, `sub()` functions
+
 ## 2.1.0
 - added `import ... [as ...]` and `from ... import ...` statements. modules can be imported from virtual file system.
 - added standard modules `math, random, time` with a subset of their methods.

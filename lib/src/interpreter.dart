@@ -933,6 +933,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       "json": _registerJson,
       "math": _registerMath,
       "random": _registerRandom,
+      "re": _registerRegexp,
       "time": _registerTime,
       };
     if (source == null) {
@@ -1044,8 +1045,80 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       double u2 = _rand.nextDouble();
       return PyNum.double(mu+sigma*sqrt(-2.0*log(u1))*cos(2*pi*u2));
     }));
+  }
 
+  void _registerRegexp() {
+    List<Token> tokens = Lexer("""
+class Match:
+  def __init__(self,start,end,groups):
+    self._start = start
+    self._end = end
+    self._groups = groups
+  def start(self):
+    return self._start
+  def end(self):
+    return self._end
+  def group(self, i):
+    return self._groups[i]
+  def groups(self):
+    return tuple(self._groups[1:len(self._groups)+1])
 
+class Pattern:
+  def __init__(self, p):
+    self.regexp = p
+
+def compile(p):
+  return Pattern(p)
+""").scanTokens();
+    interpret(Parser(tokens).parse());
+
+    _environment.define("findall", NativeFunction((inter, args, kwargs) {
+      final String pattern = args[0], text = args [1];
+      PyList pyMatches = PyList([]);
+      Iterable<RegExpMatch> matches = RegExp(pattern).allMatches(text);
+      for (var m in matches) {
+        if (m.groupCount<=1) { // return String
+          pyMatches.list.add(m.group(0)!);
+        } else { // return Tuple
+          pyMatches.list.add(PyTuple(
+            m.groups(List.generate(m.groupCount, (i) => i)).toList()
+          ));
+        }
+      }
+      return pyMatches;
+    }));
+    _environment.define("match", NativeFunction((inter, args, kwargs) {
+      _checkNumArgs("match", args, kwargs, required: 2, maxOptional: 0);
+      if (!(args[0] as String).startsWith(r"\^")) args[0] = "^${args[0]}";
+      return _reSearch(inter, args, kwargs);
+    }));
+    _environment.define("search", NativeFunction((inter, args, kwargs) {
+      _checkNumArgs("match", args, kwargs, required: 2, maxOptional: 0);
+      return _reSearch(inter, args, kwargs);
+    }));
+    _environment.define("split", NativeFunction((inter, args, kwargs) {
+      final String pattern = args[0], text = args [1];
+      return PyList(text.split(RegExp(pattern)));
+    }));
+    _environment.define("sub", NativeFunction((inter, args, kwargs) {
+      final String pattern = args[0], replacement = args[1], text = args [2];
+      return text.replaceAll(RegExp(pattern), replacement);
+    }));
+  }
+
+  PyInstance? _reSearch(Interpreter inter, List args, Map kwargs) {
+    final String pattern = args[0], text = args[1];
+    final int pos = args.length>=3 ? args[2] : 0;
+    final int endpos = args.length>=4 ? args[3] : text.length;
+    var matchClass = _environment.getByName("Match") ?? _modules["re"]!.env.getByName("Match");
+    PyInstance match=PyInstance(matchClass as PyClass);
+    PyFunction? initializer = match.klass.findMethod("__init__");
+    RegExpMatch? m = RegExp(pattern).firstMatch(text.substring(pos, endpos));
+    if (m==null) return null;
+    if (initializer != null) {
+      initializer.bind(match).call(this, [m.start, m.end, PyList(m.groups(List.generate(m.groupCount+1, (i) => i)))],  {});
+    }
+    return match;
   }
 
   void _registerTime() {
@@ -2465,6 +2538,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
     void Function(String)? printCallback,
     void Function(String)? errorCallback,
   ]) {
+    var oldPrint = _print;
     _print = printCallback ?? _printWithBuffer;
     hadRuntimeError = false;
     _lastExpressionValue = null;
@@ -2512,6 +2586,7 @@ class Interpreter implements ExprVisitor<Object?>, StmtVisitor<void> {
       // flush buffer
       _printWithBuffer("\n");
     }
+    _print = oldPrint;
     return _lastExpressionValue;
   }
 

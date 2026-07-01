@@ -28,11 +28,12 @@ An interpreter for a subset of the Python language, written purely in Dart. It i
     To make them persistent, you can access them from dart by `interpreter.vfs[filename]`.
   - `import` (only modules from virtual file system or standard modules, no packages yet).
     Available standard modules:
-    - `json` (methods: `dump, dumps, load, loads`)
-    - `math` (constants: `e, nan, inf, pi, tau`; methods: `exp, log, log2, log10, pow, sqrt, cbrt`,
+    - `json` (functions: `dump, dumps, load, loads`)
+    - `math` (constants: `e, nan, inf, pi, tau`; functions: `exp, log, log2, log10, pow, sqrt, cbrt`,
     `sin, cos, tan, asin, acos, atan, atan2, degrees, radians`)
-    - `random` (methods: `choice, gauss, randint, random, randrange, seed, uniform`)
-    - `time` (methods: `sleep` (blocking the execution), `time, time_ns`)
+    - `random` (functions: `choice, gauss, randint, random, randrange, seed, uniform`)
+    - `re` (functions: `findall, match, search, split, sub`. Optional parameters `flags, count, maxsplit` are not supported yet)
+    - `time` (functions: `sleep` (blocking the execution), `time, time_ns`)
 
   Some more features might be added soon, but this will never become a full python interpreter.
 

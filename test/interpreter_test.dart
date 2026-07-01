@@ -2895,4 +2895,98 @@ print(json.dumps(o))
         (e) => e.message, 'message', contains("Circular")));
     });
   });
+
+  group('re module', () {
+    test('match()', () {
+      final source = r'''
+import re
+m1 = re.match("a.c", "abc")
+print(m1.group(0))
+m2 = re.match("axc", "abc")
+print(m2==None)
+m3 = re.match("abc", "xabc")
+print(m3==None)
+''';
+      final result = runCode(source);
+      expect(result.output,equals('abc\nTrue\nTrue\n'));
+    });
+    test('search()', () {
+      final source = r'''
+import re
+m1 = re.search("a.c", "abc")
+print(m1.group(0))
+m2 = re.search("axc", "abc")
+print(m2==None)
+m3 = re.search("abc", "xabc")
+print(m3.start(), m3.end())
+''';
+      final result = runCode(source);
+      expect(result.output,equals('abc\nTrue\n1 4\n'));
+    });
+
+    test('findall()', () {
+      final source = r'''
+import re
+
+print(re.findall(r"\d+", "ab12cd345ef6"))
+print(re.findall(r"[a-z]+", "abc123def456"))
+print(re.findall(r"x+", "abc"))
+print(re.findall(r"a.", "abcaba"))
+  ''';
+      final result = runCode(source);
+      expect(
+        result.output,
+        equals(
+          "['12', '345', '6']\n"
+          "['abc', 'def']\n"
+          "[]\n"
+          "['ab', 'ab']\n",
+        ),
+      );
+    });
+
+    test('split()', () {
+      final source = r'''
+import re
+
+print(re.split(r",", "a,b,c"))
+print(re.split(r"\s+", "a   b\tc"))
+print(re.split(r"\d+", "abc123def45ghi"))
+print(re.split(r"x", "abc"))
+  ''';
+      final result = runCode(source);
+      expect(
+        result.output,
+        equals(
+          "['a', 'b', 'c']\n"
+          "['a', 'b', 'c']\n"
+          "['abc', 'def', 'ghi']\n"
+          "['abc']\n",
+        ),
+      );
+    });
+
+    test('sub()', () {
+      final source = r'''
+import re
+
+print(re.sub(r"\d+", "#", "ab12cd345ef"))
+print(re.sub(r"[aeiou]", "_", "hello world"))
+print(re.sub(r"x", "y", "abc"))
+print(re.sub(r"\s+", "-", "a   b\tc"))
+  ''';
+      final result = runCode(source);
+      expect(
+        result.output,
+        equals(
+          "ab#cd#ef\n"
+          "h_ll_ w_rld\n"
+          "abc\n"
+          "a-b-c\n",
+        ),
+      );
+    });
+
+  });
+
 }
